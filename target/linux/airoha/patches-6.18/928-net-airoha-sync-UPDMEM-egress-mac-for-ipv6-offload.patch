@@ -1,3 +1,4 @@
+From 325f8f0420a8523b170426b2296615d3ee737f67 Mon Sep 17 00:00:00 2001
 From: Yaoming Chen <cc201008@gmail.com>
 Subject: [PATCH] net: airoha: sync PPE UPDMEM egress MAC for offloaded IPv6 flows
 
