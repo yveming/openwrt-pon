@@ -1,52 +1,32 @@
-From: ming <ming@ponwrt.local>
-Subject: [PATCH] net: airoha: Keep UPDMEM egress MAC in sync for offloaded IPv6 flows
+From: Yaoming Chen <cc201008@gmail.com>
+Subject: [PATCH] net: airoha: sync PPE UPDMEM egress MAC for offloaded IPv6 flows
 
-PPE routed IPv6 FOE entries do not carry the egress source MAC inline;
-they store an SMAC id and the hardware resolves the address through the
-UPDMEM table, which airoha_ppe_init_upd_mem() only programs with the GDM
-port own dev_addr at probe time.
+airoha: 收录 IPv6 UPDMEM 修复(专用 UPDMEM 锁版)
 
-The netdev the flow actually egresses can legally use a different
-address: on PON routers the authentication MAC belongs to the pon device
-while each service VLAN routes with its own address, so offloaded IPv6
-frames left the port with a stale source MAC and were silently dropped
-upstream. IPv4 was unaffected since HNAPT entries embed the MAC inline,
-which made the failure hard to diagnose: TCP handshake and TLS completed
-over the slow path and the transfer stalled exactly when the flow got
-offloaded.
+路由式 IPv6 FOE 条目不内联出向源 MAC, 硬件按 smac_id 查 UPDMEM 表;
+该表仅在 probe 时写入端口自身地址。PON 多服务 VLAN 场景下会话源
+MAC 与端口地址不同(offload 后源 MAC 过期), IPv6 帧被上游静默丢弃,
+表现为 offload 接管后传输停摆。IPv4 HNAPT 条目内联 MAC 不受影响。
 
-Before writing smac_id for routed IPv6 entries, program the UPDMEM slot
-with the source address of this flow.
+修复: 路由式 IPv6 条目写 smac_id 前, 将该流实际使用的出向源 MAC
+编程进 UPDMEM 槽位。
 
-airoha_set_macaddr() writes the same slot from the ndo_open and
-ndo_set_mac_address paths: take flow_offload_mutex there too so the two
-UPDMEM writers cannot interleave their two-step DATA/CTRL sequence and
-leave a stale address behind.
+两处 UPDMEM 写入者(airoha_set_macaddr 的 ndo_open/ndo_set_mac_address
+路径, 与 flowtable offload 路径)以 airoha_ppe_init_upd_mem() 内置的
+专用叶子锁串行化: ndo 路径仅持 RTNL, offload 路径持
+flow_offload_mutex, 且 airoha_enable_qos_for_gdm34() 持
+flow_offload_mutex 调用 airoha_set_macaddr()——在调用方加锁会
+自死锁, 叶子锁覆盖全部写入者且无重入风险。
 
 Fixes: 00a7678310fe3 ("net: airoha: Introduce flowtable offload support")
 Signed-off-by: Yaoming Chen <cc201008@gmail.com>
 ---
---- a/drivers/net/ethernet/airoha/airoha_eth.c
-+++ b/drivers/net/ethernet/airoha/airoha_eth.c
-@@ -161,7 +161,15 @@
- 	airoha_fe_wr(eth, REG_FE_MAC_LMIN(reg), lmin);
- 	airoha_fe_wr(eth, REG_FE_MAC_LMAX(reg), lmax);
- 
-+	/*
-+	 * Serialize with the flowtable offload path: both writers program the
-+	 * same UPDMEM slot with a two-step DATA/CTRL sequence and concurrent
-+	 * updates would interleave, leaving a stale source MAC under already
-+	 * bound IPv6 entries.
-+	 */
-+	mutex_lock(&flow_offload_mutex);
- 	airoha_ppe_init_upd_mem(dev, addr);
-+	mutex_unlock(&flow_offload_mutex);
- 
- 	return 0;
- }
+ drivers/net/ethernet/airoha/airoha_ppe.c | 40 ++++++++++++++++++++++++
+ 1 file changed, 40 insertions(+)
+
 --- a/drivers/net/ethernet/airoha/airoha_ppe.c
 +++ b/drivers/net/ethernet/airoha/airoha_ppe.c
-@@ -516,6 +516,19 @@ airoha_ppe_foe_entry_prepare(struct airoha_eth *eth,
+@@ -518,6 +518,19 @@
  				val |= FIELD_PREP(AIROHA_FOE_IB2_NBQ, channel);
  
  			smac_id = port->id;
@@ -66,3 +46,35 @@ Signed-off-by: Yaoming Chen <cc201008@gmail.com>
  		}
  	}
  
+@@ -2143,10 +2156,22 @@
+ 
+ void airoha_ppe_init_upd_mem(struct airoha_gdm_dev *dev, const u8 *addr)
+ {
++	static DEFINE_MUTEX(updmem_lock);
++
+ 	struct airoha_gdm_port *port = dev->port;
+ 	struct airoha_eth *eth = dev->eth;
+ 	u32 val;
+ 
++	/*
++	 * The flowtable offload path programs the same UPDMEM slot with the
++	 * per-flow egress source MAC (airoha_ppe_foe_entry_prepare()), while
++	 * the ndo_open/ndo_set_mac_address paths program the port address.
++	 * Both use a two-step DATA/CTRL sequence that must not interleave:
++	 * serialize them here. This lock is a leaf: never acquire
++	 * flow_offload_mutex while holding it.
++	 */
++	mutex_lock(&updmem_lock);
++
+ 	val = (addr[2] << 24) | (addr[3] << 16) | (addr[4] << 8) | addr[5];
+ 	airoha_fe_wr(eth, REG_UPDMEM_DATA(0), val);
+ 	airoha_fe_wr(eth, REG_UPDMEM_CTRL(0),
+@@ -2159,6 +2184,8 @@
+ 		     FIELD_PREP(PPE_UPDMEM_ADDR_MASK, port->id) |
+ 		     FIELD_PREP(PPE_UPDMEM_OFFSET_MASK, 1) |
+ 		     PPE_UPDMEM_WR_MASK | PPE_UPDMEM_REQ_MASK);
++
++	mutex_unlock(&updmem_lock);
+ }
+ 
+ struct airoha_ppe_dev *airoha_ppe_get_dev(struct device *dev)
