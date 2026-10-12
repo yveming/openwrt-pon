@@ -11,10 +11,15 @@
 # repository root, which is why every patch is applied with
 # `git -C feeds/<feed> apply`.
 #
-# Idempotent: a patch that is already applied is reported and skipped, so this
+# Idempotent: a patch that is already applied is detected and skipped, so this
 # is safe to run on top of a warm feed checkout. Run it after
 # `./scripts/feeds update -a` / `install -a`; include/feed-patches.mk hooks it
 # into every make invocation, so a normal build does this automatically.
+#
+# Quiet by default: in the steady state (every patch already in place) it
+# prints nothing. Patches that are actually applied, feeds that are missing,
+# and failures are always reported. Set FEED_PATCHES_VERBOSE=1 to get the
+# full per-patch report and the summary line on every run.
 #
 # A feed that has not been fetched yet is skipped with a warning rather than
 # treated as an error, because the patched package is not in the tree either.
@@ -33,13 +38,23 @@ set -Eeuo pipefail
 cd "$(cd "$(dirname "$0")" && pwd)/.." || exit 1
 
 if [[ ! -d patches/feeds ]]; then
-	echo "No patches/feeds directory, nothing to apply."
+	say "No patches/feeds directory, nothing to apply."
 	exit 0
 fi
 
 applied=0
 skipped=0
 absent=0
+verbose="${FEED_PATCHES_VERBOSE:-0}"
+
+# Informational chatter is suppressed unless FEED_PATCHES_VERBOSE=1: the hook
+# runs on every make invocation, and the steady state (all patches already
+# applied) would otherwise spam seven lines of "already applied" per build.
+say() {
+	if [[ "$verbose" == "1" ]]; then
+		echo "$@"
+	fi
+}
 
 while IFS= read -r -d '' patch_file; do
 	feed_path="${patch_file#patches/feeds/}"
@@ -67,7 +82,7 @@ while IFS= read -r -d '' patch_file; do
 		git -C "$feed_dir" apply < "$patch_file"
 		applied=$((applied + 1))
 	elif git -C "$feed_dir" apply --reverse --check < "$patch_file" 2>/dev/null; then
-		echo "Feed patch already applied: $patch_file"
+		say "Feed patch already applied: $patch_file"
 		skipped=$((skipped + 1))
 	else
 		echo "Feed patch does not apply cleanly: $patch_file" >&2
@@ -76,4 +91,8 @@ while IFS= read -r -d '' patch_file; do
 	fi
 done < <(find patches/feeds -type f -name '*.patch' -print0 | sort -z)
 
-echo "Feed patches: $applied applied, $skipped already present, $absent skipped (feed absent)."
+# The summary is only worth a line when something actually happened; in the
+# quiet steady state it would be one more line of noise on every make.
+if (( applied > 0 || absent > 0 )) || [[ "$verbose" == "1" ]]; then
+	echo "Feed patches: $applied applied, $skipped already present, $absent skipped (feed absent)."
+fi
