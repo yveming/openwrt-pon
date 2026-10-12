@@ -3,6 +3,37 @@
 本文件记录 Gemtek Brightspeed 固件仓库的重要功能、稳定性和维护变更。常规的
 ImmortalWrt 上游合并不逐项展开，仅记录会影响本设备构建或运行行为的内容。
 
+## 2026-10-12
+
+### 修复 PON 链路上 IPv6 硬件分载静默断流（UPDMEM 源 MAC 失同步）
+
+- 新增
+  `target/linux/airoha/patches-6.18/928-net-airoha-sync-UPDMEM-egress-mac-for-ipv6-offload.patch`：
+  `airoha_ppe_foe_entry_prepare()` 在为路由式 IPv6 流写 `smac_id` 之前，先把该流
+  实际使用的出向源 MAC 编程进 UPDMEM 表项（复用 `airoha_ppe_init_upd_mem()`）。
+- 根因：IPv6 FOE 条目不内联源 MAC，硬件按 `smac_id` 查 UPDMEM；该表只在 probe
+  时写入 GDM 端口自身的 `dev_addr`（gdm2 = factory 0x3e = `:f3`）。当会话 MAC
+  与端口 MAC 不一致时——例如 pon0.1024 为隔离多服务 DHCP 而单独配置 `:f8`——
+  硬件发出的 IPv6 帧携带过期的源 MAC，被上游静默丢弃。TCP/TLS 在慢路径完成，
+  流量恰在硬件分载接管后停摆，表现为"只有 IPv6、传一半卡死"。IPv4 HNAPT 条目
+  内联源 MAC，故完全不受影响。
+- 现网验证：手工向 UPDMEM[2] 写入 `:f8` 后 v6 立即恢复满速（中科大测速从数 MB
+  恢复到与 v4 同速），conntrack 正常挂载 `[HW_OFFLOAD]`。补丁将此行为固化。
+- 已知边界：同一 GDM 端口并发承载多个不同源 MAC 的路由式 IPv6 流时，表项按
+  最近一次 offload 生效（当前家庭业务仅上网 VLAN 走 v6 路由，不受影响）。
+
+### fcc helper 注册改为镜像内置 + 卸载对称清理
+
+- `kmod-nf-nathelper-fcc` 的 postinst 原先使用绝对路径，构建镜像时以
+  `IPKG_INSTROOT` 指向 rootfs 暂存目录执行，检查的是构建机自身的
+  `/usr/share/firewall4`（不存在）而静默退出，导致烧录镜像永远缺失 helper 段，
+  只有设备上手动 `apk add` 才生效。现改为 `IPKG_INSTROOT` 感知路径，
+  `modprobe`/`fw4 reload` 仅在真机执行。
+- 新增 prerm（apk 的 pre-deinstall）：卸载时按
+  `# >>>/<<< kmod-nf-nathelper-fcc` 标记删除 helpers 中的 fcc 段并 reload。
+  追加进 firewall4 文件的内容不属于本包，`apk del` 不会清理，此前会残留。
+  段改用标记注释包裹，移除仅用 sed 实现，不引入额外依赖。
+
 ## 2026-10-08
 
 ### 同步 ImmortalWrt 上游至 6.18.54
