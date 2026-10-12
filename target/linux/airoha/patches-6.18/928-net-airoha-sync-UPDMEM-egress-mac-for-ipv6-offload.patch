@@ -1,0 +1,68 @@
+From: ming <ming@ponwrt.local>
+Subject: [PATCH] net: airoha: Keep UPDMEM egress MAC in sync for offloaded IPv6 flows
+
+PPE routed IPv6 FOE entries do not carry the egress source MAC inline;
+they store an SMAC id and the hardware resolves the address through the
+UPDMEM table, which airoha_ppe_init_upd_mem() only programs with the GDM
+port own dev_addr at probe time.
+
+The netdev the flow actually egresses can legally use a different
+address: on PON routers the authentication MAC belongs to the pon device
+while each service VLAN routes with its own address, so offloaded IPv6
+frames left the port with a stale source MAC and were silently dropped
+upstream. IPv4 was unaffected since HNAPT entries embed the MAC inline,
+which made the failure hard to diagnose: TCP handshake and TLS completed
+over the slow path and the transfer stalled exactly when the flow got
+offloaded.
+
+Before writing smac_id for routed IPv6 entries, program the UPDMEM slot
+with the source address of this flow.
+
+airoha_set_macaddr() writes the same slot from the ndo_open and
+ndo_set_mac_address paths: take flow_offload_mutex there too so the two
+UPDMEM writers cannot interleave their two-step DATA/CTRL sequence and
+leave a stale address behind.
+
+Fixes: 00a7678310fe3 ("net: airoha: Introduce flowtable offload support")
+Signed-off-by: Yaoming Chen <cc201008@gmail.com>
+---
+--- a/drivers/net/ethernet/airoha/airoha_eth.c
++++ b/drivers/net/ethernet/airoha/airoha_eth.c
+@@ -161,7 +161,15 @@
+ 	airoha_fe_wr(eth, REG_FE_MAC_LMIN(reg), lmin);
+ 	airoha_fe_wr(eth, REG_FE_MAC_LMAX(reg), lmax);
+ 
++	/*
++	 * Serialize with the flowtable offload path: both writers program the
++	 * same UPDMEM slot with a two-step DATA/CTRL sequence and concurrent
++	 * updates would interleave, leaving a stale source MAC under already
++	 * bound IPv6 entries.
++	 */
++	mutex_lock(&flow_offload_mutex);
+ 	airoha_ppe_init_upd_mem(dev, addr);
++	mutex_unlock(&flow_offload_mutex);
+ 
+ 	return 0;
+ }
+--- a/drivers/net/ethernet/airoha/airoha_ppe.c
++++ b/drivers/net/ethernet/airoha/airoha_ppe.c
+@@ -516,6 +516,19 @@ airoha_ppe_foe_entry_prepare(struct airoha_eth *eth,
+ 				val |= FIELD_PREP(AIROHA_FOE_IB2_NBQ, channel);
+ 
+ 			smac_id = port->id;
++			/*
++			 * Routed IPv6 entries resolve the egress source MAC
++			 * through the UPDMEM table indexed by smac_id. The
++			 * egress netdev can legally carry a different address
++			 * than the GDM port itself: on PON setups the
++			 * authentication MAC lives on the pon device while
++			 * each service VLAN routes with its own address. Keep
++			 * the table entry in sync with the source address this
++			 * flow is actually going to use.
++			 */
++			if (type >= PPE_PKT_TYPE_IPV6_ROUTE_3T)
++				airoha_ppe_init_upd_mem(dev,
++							data->eth.h_source);
+ 		}
+ 	}
+ 
