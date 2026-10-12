@@ -1,22 +1,39 @@
 From: Yaoming Chen <cc201008@gmail.com>
 Subject: [PATCH] net: airoha: sync PPE UPDMEM egress MAC for offloaded IPv6 flows
 
-airoha: 收录 IPv6 UPDMEM 修复(专用 UPDMEM 锁版)
+Routed IPv6 FOE entries do not carry the egress source MAC inline;
+they store an SMAC id and the hardware resolves the address through
+the UPDMEM table, which airoha_ppe_init_upd_mem() only programs with
+the GDM port's own dev_addr at probe time.
 
-路由式 IPv6 FOE 条目不内联出向源 MAC, 硬件按 smac_id 查 UPDMEM 表;
-该表仅在 probe 时写入端口自身地址。PON 多服务 VLAN 场景下会话源
-MAC 与端口地址不同(offload 后源 MAC 过期), IPv6 帧被上游静默丢弃,
-表现为 offload 接管后传输停摆。IPv4 HNAPT 条目内联 MAC 不受影响。
+The netdev the flow actually egresses can legally carry a different
+address: on PON setups the authentication MAC belongs to the pon
+device while each service VLAN routes with its own address, so
+offloaded IPv6 frames left the port with a stale source MAC and were
+silently dropped upstream. IPv4 was unaffected since HNAPT entries
+embed the MAC inline, which made the failure hard to diagnose: TCP
+handshake and TLS completed over the slow path and the transfer
+stalled exactly when the flow got offloaded.
 
-修复: 路由式 IPv6 条目写 smac_id 前, 将该流实际使用的出向源 MAC
-编程进 UPDMEM 槽位。
+Before writing smac_id for routed IPv6 entries, program the UPDMEM
+slot with the source address of this flow.
 
-两处 UPDMEM 写入者(airoha_set_macaddr 的 ndo_open/ndo_set_mac_address
-路径, 与 flowtable offload 路径)以 airoha_ppe_init_upd_mem() 内置的
-专用叶子锁串行化: ndo 路径仅持 RTNL, offload 路径持
-flow_offload_mutex, 且 airoha_enable_qos_for_gdm34() 持
-flow_offload_mutex 调用 airoha_set_macaddr()——在调用方加锁会
-自死锁, 叶子锁覆盖全部写入者且无重入风险。
+airoha_set_macaddr() writes the same slot from the ndo_open and
+ndo_set_mac_address paths, and the flowtable offload path writes it
+from airoha_ppe_foe_entry_prepare() under flow_offload_mutex. Both
+writers use a two-step DATA/CTRL sequence that must not interleave,
+and airoha_enable_qos_for_gdm34()/airoha_disable_qos_for_gdm34()
+already hold flow_offload_mutex across their airoha_set_macaddr()
+calls - so the serialization lives in airoha_ppe_init_upd_mem()
+itself as a dedicated leaf lock: every writer converges there, the
+probe-time caller included, and the lock is never held while
+acquiring flow_offload_mutex, so there is no nesting and no
+re-entrancy.
+
+Tested on a Nokia XG-040G-MD (AN7581, GPON WAN, PPPoE over a service
+VLAN carrying its own MAC address): IPv6 HTTPS transfers went from
+stalling at the 15 s curl cap with partial bytes to completing at line
+rate with hardware offloading enabled, matching IPv4 throughput.
 
 Fixes: 00a7678310fe3 ("net: airoha: Introduce flowtable offload support")
 Signed-off-by: Yaoming Chen <cc201008@gmail.com>
