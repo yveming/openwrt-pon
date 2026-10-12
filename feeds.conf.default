@@ -15,3 +15,4 @@ src-git openwrt_bandix https://github.com/timsaya/openwrt-bandix.git;main
 src-git luci_app_bandix https://github.com/timsaya/luci-app-bandix.git;main
 src-git helloworld https://github.com/fw876/helloworld.git;dev
 src-git --directory=luci-app-pushbot pushbot https://github.com/zzsj0928/luci-app-pushbot.git
+src-git pon_userspace https://github.com/pbs05/openwrt-pon-userspace.git
