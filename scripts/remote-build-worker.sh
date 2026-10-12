@@ -57,7 +57,7 @@ run_build() {
 	cp "$config_seed" .config
 	bash scripts/set-build-version.sh .config
 	make defconfig
-	bash scripts/check-gemtek-profile-isolation.sh --config .config
+	bash scripts/check-profile-isolation.sh --config .config
 
 	case "$mode" in
 		kernel)
@@ -90,7 +90,7 @@ run_build() {
 		}
 		check_args+=(--manifest "$manifest")
 	fi
-	bash scripts/check-gemtek-profile-isolation.sh "${check_args[@]}"
+	bash scripts/check-profile-isolation.sh "${check_args[@]}"
 
 	echo "REMOTE_BUILD_FINISHED=$(date --iso-8601=seconds)"
 	if [[ "$mode" == "world" && -d bin/targets/airoha/an7581 ]]; then

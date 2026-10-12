@@ -4,7 +4,7 @@ set -Eeuo pipefail
 
 usage() {
 	cat >&2 <<'EOF'
-usage: check-gemtek-profile-isolation.sh --config <file> [--kernel-config <file>] [--manifest <file> ...]
+usage: check-profile-isolation.sh --config <file> [--kernel-config <file>] [--manifest <file> ...]
 EOF
 	exit 2
 }
