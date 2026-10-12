@@ -5,6 +5,14 @@ ImmortalWrt 上游合并不逐项展开，仅记录会影响本设备构建或�
 
 ## 2026-10-12
 
+### 合并对齐策略
+
+- 内核/驱动/网络补丁以 naoki66/master 为对齐基线（其补丁集随上游活跃更新）。
+- 产品定义（设备 DTS、image profile、产品化配置）以 pbs05/ponwrt 为准——
+  naoki66 库不含本产品线设备，两者冲突时产品侧一律以 pbs05 裁决。
+- 本轮合并后 `target/linux/airoha/patches-6.18/` 与 `target/linux/generic/pending-6.18/`
+  已与 naoki66/master 完全一致，唯一差异为本仓库新增的 928 号补丁。
+
 ### 修复 PON 链路上 IPv6 硬件分载静默断流（UPDMEM 源 MAC 失同步）
 
 - 新增
