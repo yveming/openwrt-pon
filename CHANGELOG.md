@@ -13,23 +13,31 @@ ImmortalWrt 上游合并不逐项展开，仅记录会影响本设备构建或�
   合并由本地按 `docs/upstream-sync.md` 执行。来源锁定见 `vendor.lock` +
   `scripts/sync-vendors.sh`。
 
-### 修复 XR1710G / XG2010G UBI 出货配置无 profile 可用
+### 修复 XR1710G / XG2010G UBI profile 与 board.d 条目缺失
 
 - `image/an7581.mk` 的 `gemtek_xr1710g*`、`gemtek_xg2010g-ubi`、`gemtek_xg2010g-2g-ubi`
   以及 `board.d/{01_leds,02_network,03_pon_data}`、`upgrade/platform.sh` 里的
-  `gemtek,xr1710g*` 分支，在上一轮 pbs05 对齐中被覆盖丢失 —— 导致
-  `1710.config` / `2010.config` / `2010-2g.config` 引用的 profile 全部落空，
-  XR1710G 会落到 `*)` 打印 "Unsupported hardware"。现已补回。
+  `gemtek,xr1710g*` 分支，在上一轮 pbs05 对齐中被覆盖丢失（XR1710G 会落到 `*)`
+  打印 "Unsupported hardware"）。现已补回。
+- 注：本产品线为 pbs05 的设备集（出货配置 `configs/an7581.config` / `an7583.config`），
+  不含 XR1710G；这些条目保留是为了不丢失已修好的设备支持。
 
-### 内核补丁栈（L1）重建为单一供应商基准
+### 内核补丁栈（L1）基准 = pbs05
 
 - 两个供应商对同一个内核各维护一套补丁，合并后混用导致 **14 个补丁无法套用**；
   `patch-kernel.sh` 失败即 `exit 1`，即构建无法产出镜像。
-- 现以 naoki66 的补丁栈为基准（其设备线与本产品一致），并保留产品需要的追加补丁：
-  `928`（UPDMEM IPv6 源 MAC）、`951`（BBRv3 拥塞控制）、`743`（RTL8261 USXGMII inband）。
-- 删除 pbs05 的 14 个 `675-*`（与 naoki66 的同属一条 bridge-flowtable 序列、编号方案不同）、
-  `170`/`310-12`/`930`（被 `182`/`9994` 取代）、以及已对 6.18.55 失效的 `914`/`914b`
-  （naoki66 上游同样套不上；PCIe PERST 由 `220-10`/`609-04`/`913` 覆盖）。
+- 本产品线即 pbs05 的设备集（`configs/an7581.config` / `an7583.config`），
+  因此 L1 采用 **pbs05 的整套补丁栈**（643 个补丁干净套用），只保留仓库自有的
+  `928`（UPDMEM IPv6 源 MAC）作为追加补丁。
+- naoki66 那一套（含 XR1710G 专用件、以及已对 6.18.55 失效的 `914`/`914b`）
+  不再并入；其 `920-xg2010g-pon-*`、`9990/9993/9994/9999-*` 等为 XR1710G 线相关，
+  如后续确认对本产品线有价值，再逐个叠加并验证。
+
+### 产品配置与 CI
+
+- CI 的构建选项由 `1710/2010/2010-2g` 改为 **`an7581.config` / `an7583.config`**
+  （即本产品实际出货的配置），产物路径随子目标动态解析。
+- 移除 CI 里 Gemtek 专用的 `check-profile-isolation.sh` 检查（对多设备配置不适用）。
 
 ### 供应商包外置到 feed
 

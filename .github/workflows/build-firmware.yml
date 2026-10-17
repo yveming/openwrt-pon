@@ -6,12 +6,11 @@ on:
       config_seed:
         description: 'Build config'
         required: true
-        default: '1710.config'
+        default: 'an7581.config'
         type: choice
         options:
-          - 1710.config
-          - 2010.config
-          - 2010-2g.config
+          - an7581.config
+          - an7583.config
       release_type:
         description: 'Release Type'
         required: true
@@ -62,12 +61,13 @@ jobs:
           echo "version_number=$version_number" >> $GITHUB_OUTPUT
           echo "version_code=$version_code" >> $GITHUB_OUTPUT
           case '${{ inputs.config_seed }}' in
-            1710.config) device_model=XR1710G ;;
-            2010.config) device_model=XG2010G ;;
-            2010-2g.config) device_model=XG2010G-2G ;;
+            an7581.config) device_model=AN7581 ;;
+            an7583.config) device_model=AN7583 ;;
             *) echo "Unsupported config seed: ${{ inputs.config_seed }}" >&2; exit 1 ;;
           esac
           echo "device_model=$device_model" >> $GITHUB_OUTPUT
+          subtarget="$(echo '${{ inputs.config_seed }}' | sed -E 's/^an([0-9]+)\.config$/\1/')"
+          echo "subtarget=$subtarget" >> $GITHUB_OUTPUT
           echo "Build version: openwrt pon $version_number"
 
       - name: Setup build environment
@@ -128,20 +128,14 @@ jobs:
             tail -150 build.log || true
           fi
 
-      - name: Verify device isolation
+      - name: Verify device artifacts
         shell: bash
         run: |
+          subtarget="$(echo '${{ inputs.config_seed }}' | sed -E 's/^an([0-9]+)\.config$/\1/')"
+          test -n "$subtarget"
           bash scripts/check-firmware-artifacts.sh \
             --config .config \
-            --directory bin/targets/airoha/an7581
-          kernel_config=$(find build_dir/target-aarch64_cortex-a53_musl/linux-airoha_an7581 -path '*/linux-*/.config' -print -quit)
-          manifest=$(find bin/targets/airoha/an7581 -maxdepth 1 -type f -name '*manifest' -print -quit)
-          test -n "$kernel_config"
-          test -n "$manifest"
-          bash scripts/check-profile-isolation.sh \
-            --config .config \
-            --kernel-config "$kernel_config" \
-            --manifest "$manifest"
+            --directory "bin/targets/airoha/an${subtarget}"
 
       - name: Check build status
         if: always()
@@ -150,14 +144,13 @@ jobs:
             bash scripts/summarize-build-errors.sh build.log || true
             tail -100 build.log
           fi
-          echo "=== List all files in bin/targets/airoha/an7581/ ==="
-          ls -la bin/targets/airoha/an7581/ 2>/dev/null || echo "No files found in an7581 directory"
-          echo "=== List all files in bin/targets/airoha/ ==="
-          ls -la bin/targets/airoha/ 2>/dev/null || echo "No files found in airoha directory"
-          echo "=== List all files in bin/targets/ ==="
-          ls -la bin/targets/ 2>/dev/null || echo "No files found in targets directory"
-          echo "=== List all files in bin/ ==="
-          ls -la bin/ 2>/dev/null || echo "No files found in bin directory"
+          subtarget="$(echo '${{ inputs.config_seed }}' | sed -E 's/^an([0-9]+)\.config$/\1/')"
+          echo "=== bin/targets/airoha/an${subtarget}/ ==="
+          ls -la "bin/targets/airoha/an${subtarget}/" 2>/dev/null || echo "无产物"
+          echo "=== bin/targets/airoha/ ==="
+          ls -la bin/targets/airoha/ 2>/dev/null || echo "无产物"
+          echo "=== bin/ ==="
+          ls -la bin/ 2>/dev/null || echo "无产物"
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v7
@@ -166,12 +159,12 @@ jobs:
           path: |
             build.log
             build-verbose.log
-            bin/targets/airoha/an7581/*.itb
-            bin/targets/airoha/an7581/*manifest
-            bin/targets/airoha/an7581/config.buildinfo
-            bin/targets/airoha/an7581/feeds.buildinfo
-            bin/targets/airoha/an7581/version.buildinfo
-            bin/targets/airoha/an7581/sha256sums
+            bin/targets/airoha/an${{ steps.version.outputs.subtarget }}/*.itb
+            bin/targets/airoha/an${{ steps.version.outputs.subtarget }}/*manifest
+            bin/targets/airoha/an${{ steps.version.outputs.subtarget }}/config.buildinfo
+            bin/targets/airoha/an${{ steps.version.outputs.subtarget }}/feeds.buildinfo
+            bin/targets/airoha/an${{ steps.version.outputs.subtarget }}/version.buildinfo
+            bin/targets/airoha/an${{ steps.version.outputs.subtarget }}/sha256sums
           retention-days: 30
         if: always()
 
@@ -200,10 +193,10 @@ jobs:
           draft: false
           prerelease: ${{ github.event.inputs.release_type == 'prerelease' }}
           files: |
-            bin/targets/airoha/an7581/*.itb
-            bin/targets/airoha/an7581/config.buildinfo
-            bin/targets/airoha/an7581/feeds.buildinfo
-            bin/targets/airoha/an7581/version.buildinfo
-            bin/targets/airoha/an7581/sha256sums
+            bin/targets/airoha/an${{ steps.version.outputs.subtarget }}/*.itb
+            bin/targets/airoha/an${{ steps.version.outputs.subtarget }}/config.buildinfo
+            bin/targets/airoha/an${{ steps.version.outputs.subtarget }}/feeds.buildinfo
+            bin/targets/airoha/an${{ steps.version.outputs.subtarget }}/version.buildinfo
+            bin/targets/airoha/an${{ steps.version.outputs.subtarget }}/sha256sums
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
