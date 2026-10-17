@@ -88,6 +88,15 @@ scripts/check-seed-symbols.sh configs/1710.config configs/2010.config configs/20
 feed 没挂上、包被移出主树时，符号会被 Kconfig **静默丢弃**（`lucky`、`luci-app-airoha-*`
 都踩过这个坑）。
 
+## 后续可选项（未做，记录备查）
+
+- **把 fork 关系换到 immortalwrt 上**：现在本仓库的 fork 父是 `pbs05/ponwrt`（GitHub 不支持改父仓库），
+  所以 `master` 只能跟随 pbs05。若要"`master` = 官方镜像"这种更顺的逻辑，需要新建一个
+  `yveming/immortalwrt` fork，把 `pon` 分支搬过去、默认分支设为 `pon`，并把 CI / secrets / releases
+  迁过去；本仓库可保留为发布/文档仓库或归档。代价是一次迁移，收益是 fork 语义正确、可直接向官方提 PR。
+- 本地遗留分支可清理：`legacy-master-ci`（无独有内容）、`legacy-master`（内容已由 tag
+  `state-2026-10-17-pre-migration` 在远端留档）；远端旧分支 `kernel-fix-fraglist-gro-multicast` 也可删。
+
 ## 已知的历史坑
 
 - `image/an7581.mk` 里的 `gemtek_xr1710g*` / `gemtek_xg2010g-ubi` / `gemtek_xg2010g-2g-ubi`
