@@ -1,24 +1,38 @@
 From: PonWrt Project
+Date: Thu, 24 Sep 2026 00:00:00 +0800
 Subject: [PATCH] net-tcp: add BBRv3 congestion control support
 
-Upgrade tcp_bbr to Google's BBRv3, registered as "bbr", and retain the
-upstream BBRv1 copy as tcp_bbr1 ("bbr1", CONFIG_TCP_CONG_BBR1).
+Backport Google TCP BBRv3 for Linux 6.18. The BBR congestion control
+module (tcp_bbr) is upgraded to v3 and registers under the existing
+"bbr" algorithm name. The legacy BBRv1 implementation is kept available
+as a separate tcp_bbr1 module ("bbr1", CONFIG_TCP_CONG_BBR1) for
+testing and fallback purposes.
 
-Include the TCP rate sampling, in-flight/loss accounting, TLP recovery,
-CE events, fast ACK mode, ECN low route hints, congestion control hooks
-and diagnostic extensions required by BBRv3.
+The backport adds the core TCP machinery required by BBRv3: per-skb
+in-flight/lost accounting in tcp_rate, TLP recovery and CE congestion
+events, fast ACK mode, ECN low / ecn_low route hints, 32-bit usec rate
+timestamps, enlarged congestion control private data, extended
+inet_diag/tcp_info BBRv3 statistics and the tso_segs/skb_marked_lost
+congestion control operations.
 
-Regenerated from https://github.com/sdhz150/linux-bbr3 linux-6.18.y:
-  BBRv3: 87b0b260f3b59cb2aea952c6458022f5622a3963
-  Base:  725bd2f3c81d54edccb66fead01d4c0c222e2231 (Linux 6.18.55)
+The BBRv3 codebase targets the post-6.18.52 TCP timer layout, so the
+patch also carries the required upstream 6.18.53-stable prerequisites:
+- tcp: rename icsk_timeout() to tcp_timeout_expires()
+- tcp: introduce icsk->icsk_keepalive_timer
+- tcp: remove icsk->icsk_retransmit_timer
+(the retransmit/keepalive timers move from inet_connection_sock into
+struct sock), plus the accompanying MPTCP stable fixes touching the
+same code paths so the MPTCP subsystem stays self-consistent.
 
-Refresh against PonWrt's preceding generic patches. TCP timer and MPTCP
-stable fixes are already present in Linux 6.18.55 and are not included.
+Based on the mainline BBRv3 backport maintained at
+https://github.com/sdhz150/linux-bbr3 (linux-6.18.y), derived from
+Google's official BBRv3 release (https://github.com/google/bbr v3
+branch), dual-licensed GPLv2/BSD like the upstream BBR code.
 
 Signed-off-by: PonWrt Project
 ---
 diff --git a/include/linux/tcp.h b/include/linux/tcp.h
-index 8e1266cf8ef6967c89ff6bf9f9267fa12a6b4eff..d90cbfc6d1d6dcbedef9acda1a6c69cc42822609 100644
+index 8e1266cf8ef6..d90cbfc6d1d6 100644
 --- a/include/linux/tcp.h
 +++ b/include/linux/tcp.h
 @@ -235,7 +235,8 @@ struct tcp_sock {
@@ -42,10 +56,10 @@ index 8e1266cf8ef6967c89ff6bf9f9267fa12a6b4eff..d90cbfc6d1d6dcbedef9acda1a6c69cc
  		unused2:4;
  	u8	accecn_minlen:2,/* Minimum length of AccECN option sent */
 diff --git a/include/net/inet_connection_sock.h b/include/net/inet_connection_sock.h
-index d50e0afc3193f80babb81d224f3d0aac33ebff88..3d64ff8b053fb3ff456ac8e0d2a4c122528b0285 100644
+index afec146b8baf..3d64ff8b053f 100644
 --- a/include/net/inet_connection_sock.h
 +++ b/include/net/inet_connection_sock.h
-@@ -139,8 +139,8 @@ struct inet_connection_sock {
+@@ -134,8 +139,8 @@ struct inet_connection_sock {
  	u32			  icsk_probes_tstamp;
  	u32			  icsk_user_timeout;
  
@@ -57,7 +71,7 @@ index d50e0afc3193f80babb81d224f3d0aac33ebff88..3d64ff8b053fb3ff456ac8e0d2a4c122
  
  #define ICSK_TIME_RETRANS	1	/* Retransmit timer */
 diff --git a/include/net/tcp.h b/include/net/tcp.h
-index e40bad56064861388279d22515f4b7e08f0c2547..70c8e212a27a985fb5a1c27a07e2ea0589ac2671 100644
+index 25bb67e28ad4..561e58342d88 100644
 --- a/include/net/tcp.h
 +++ b/include/net/tcp.h
 @@ -402,6 +402,8 @@ static inline void tcp_dec_quickack_mode(struct sock *sk)
@@ -69,7 +83,7 @@ index e40bad56064861388279d22515f4b7e08f0c2547..70c8e212a27a985fb5a1c27a07e2ea05
  
  #define	TCP_ECN_DISABLED	0
  #define	TCP_ECN_MODE_PENDING	(TCP_ECN_MODE_RFC3168 | TCP_ECN_MODE_ACCECN)
-@@ -742,6 +744,10 @@ bool tcp_schedule_loss_probe(struct sock *sk, bool advancing_rto);
+@@ -743,6 +744,10 @@ bool tcp_schedule_loss_probe(struct sock *sk, bool advancing_rto);
  void tcp_skb_collapse_tstamp(struct sk_buff *skb,
  			     const struct sk_buff *next_skb);
  
@@ -80,7 +94,7 @@ index e40bad56064861388279d22515f4b7e08f0c2547..70c8e212a27a985fb5a1c27a07e2ea05
  /* tcp_input.c */
  void tcp_rearm_rto(struct sock *sk);
  void tcp_synack_rtt_meas(struct sock *sk, struct request_sock *req);
-@@ -840,6 +846,15 @@ static inline u32 __tcp_set_rto(const struct tcp_sock *tp)
+@@ -841,6 +846,15 @@ static inline u32 __tcp_set_rto(const struct tcp_sock *tp)
  
  u32 tcp_delack_max(const struct sock *sk);
  
@@ -96,7 +110,7 @@ index e40bad56064861388279d22515f4b7e08f0c2547..70c8e212a27a985fb5a1c27a07e2ea05
  /* Compute the actual rto_min value */
  static inline u32 tcp_rto_min(const struct sock *sk)
  {
-@@ -945,6 +960,11 @@ static inline u32 tcp_stamp_us_delta(u64 t1, u64 t0)
+@@ -946,6 +960,11 @@ static inline u32 tcp_stamp_us_delta(u64 t1, u64 t0)
  	return max_t(s64, t1 - t0, 0);
  }
  
@@ -108,7 +122,7 @@ index e40bad56064861388279d22515f4b7e08f0c2547..70c8e212a27a985fb5a1c27a07e2ea05
  /* provide the departure time in us unit */
  static inline u64 tcp_skb_timestamp_us(const struct sk_buff *skb)
  {
-@@ -1058,9 +1078,14 @@ struct tcp_skb_cb {
+@@ -1059,9 +1078,14 @@ struct tcp_skb_cb {
  			/* pkts S/ACKed so far upon tx of skb, incl retrans: */
  			__u32 delivered;
  			/* start of send pipeline phase */
@@ -125,7 +139,7 @@ index e40bad56064861388279d22515f4b7e08f0c2547..70c8e212a27a985fb5a1c27a07e2ea05
  		} tx;   /* only used for outgoing skbs */
  		union {
  			struct inet_skb_parm	h4;
-@@ -1173,6 +1198,7 @@ enum tcp_ca_event {
+@@ -1174,6 +1198,7 @@ enum tcp_ca_event {
  	CA_EVENT_LOSS,		/* loss timeout */
  	CA_EVENT_ECN_NO_CE,	/* ECT set, but not CE marked */
  	CA_EVENT_ECN_IS_CE,	/* received CE marked IP packet */
@@ -133,7 +147,7 @@ index e40bad56064861388279d22515f4b7e08f0c2547..70c8e212a27a985fb5a1c27a07e2ea05
  };
  
  /* Information about inbound ACK, passed to cong_ops->in_ack_event() */
-@@ -1201,9 +1227,11 @@ enum tcp_ca_ack_event_flags {
+@@ -1202,9 +1227,11 @@ enum tcp_ca_ack_event_flags {
  #define TCP_CONG_ECT_1_NEGOTIATION	BIT(3)
  /* Cannot fallback to RFC3168 during AccECN negotiation */
  #define TCP_CONG_NO_FALLBACK_RFC3168	BIT(4)
@@ -146,7 +160,7 @@ index e40bad56064861388279d22515f4b7e08f0c2547..70c8e212a27a985fb5a1c27a07e2ea05
  
  union tcp_cc_info;
  
-@@ -1223,10 +1251,13 @@ struct ack_sample {
+@@ -1224,10 +1251,13 @@ struct ack_sample {
   */
  struct rate_sample {
  	u64  prior_mstamp; /* starting timestamp for interval */
@@ -161,7 +175,7 @@ index e40bad56064861388279d22515f4b7e08f0c2547..70c8e212a27a985fb5a1c27a07e2ea05
  	long interval_us;	/* time for tp->delivered to incr "delivered" */
  	u32 snd_interval_us;	/* snd interval for delivered packets */
  	u32 rcv_interval_us;	/* rcv interval for delivered packets */
-@@ -1237,7 +1268,9 @@ struct rate_sample {
+@@ -1238,7 +1268,9 @@ struct rate_sample {
  	u32  last_end_seq;	/* end_seq of most recently ACKed packet */
  	bool is_app_limited;	/* is sample from packet with bubble in pipe? */
  	bool is_retrans;	/* is sample from retransmission? */
@@ -171,7 +185,7 @@ index e40bad56064861388279d22515f4b7e08f0c2547..70c8e212a27a985fb5a1c27a07e2ea05
  };
  
  struct tcp_congestion_ops {
-@@ -1261,8 +1294,11 @@ struct tcp_congestion_ops {
+@@ -1262,8 +1294,11 @@ struct tcp_congestion_ops {
  	/* hook for packet ack accounting (optional) */
  	void (*pkts_acked)(struct sock *sk, const struct ack_sample *sample);
  
@@ -185,7 +199,7 @@ index e40bad56064861388279d22515f4b7e08f0c2547..70c8e212a27a985fb5a1c27a07e2ea05
  
  	/* call when packets are delivered to update cwnd and pacing rate,
  	 * after all the ca_state processing. (optional)
-@@ -1328,6 +1364,14 @@ static inline char *tcp_ca_get_name_by_key(u32 key, char *buffer)
+@@ -1329,6 +1364,14 @@ static inline char *tcp_ca_get_name_by_key(u32 key, char *buffer)
  }
  #endif
  
@@ -200,7 +214,7 @@ index e40bad56064861388279d22515f4b7e08f0c2547..70c8e212a27a985fb5a1c27a07e2ea05
  static inline bool tcp_ca_needs_ecn(const struct sock *sk)
  {
  	const struct inet_connection_sock *icsk = inet_csk(sk);
-@@ -1368,6 +1412,7 @@ static inline void tcp_ca_event(struct sock *sk, const enum tcp_ca_event event)
+@@ -1369,6 +1412,7 @@ static inline void tcp_ca_event(struct sock *sk, const enum tcp_ca_event event)
  void tcp_set_ca_state(struct sock *sk, const u8 ca_state);
  
  /* From tcp_rate.c */
@@ -208,7 +222,7 @@ index e40bad56064861388279d22515f4b7e08f0c2547..70c8e212a27a985fb5a1c27a07e2ea05
  void tcp_rate_skb_sent(struct sock *sk, struct sk_buff *skb);
  void tcp_rate_skb_delivered(struct sock *sk, struct sk_buff *skb,
  			    struct rate_sample *rs);
-@@ -1380,6 +1425,21 @@ static inline bool tcp_skb_sent_after(u64 t1, u64 t2, u32 seq1, u32 seq2)
+@@ -1381,6 +1425,21 @@ static inline bool tcp_skb_sent_after(u64 t1, u64 t2, u32 seq1, u32 seq2)
  	return t1 > t2 || (t1 == t2 && after(seq1, seq2));
  }
  
@@ -230,7 +244,7 @@ index e40bad56064861388279d22515f4b7e08f0c2547..70c8e212a27a985fb5a1c27a07e2ea05
  /* These functions determine how the current flow behaves in respect of SACK
   * handling. SACK is negotiated with the peer, and therefore it can vary
   * between different flows.
-@@ -2600,7 +2660,7 @@ struct tcp_plb_state {
+@@ -2601,7 +2660,7 @@ struct tcp_plb_state {
  	u8	consec_cong_rounds:5, /* consecutive congested rounds */
  		unused:3;
  	u32	pause_until; /* jiffies32 when PLB can resume rerouting */
@@ -240,7 +254,7 @@ index e40bad56064861388279d22515f4b7e08f0c2547..70c8e212a27a985fb5a1c27a07e2ea05
  static inline void tcp_plb_init(const struct sock *sk,
  				struct tcp_plb_state *plb)
 diff --git a/include/net/tcp_ecn.h b/include/net/tcp_ecn.h
-index 59d6944f8d103dbe690492caf9fa7173550230eb..ef22e09f141c36355c52ce27774b5cd2dec6149c 100644
+index 59d6944f8d10..ef22e09f141c 100644
 --- a/include/net/tcp_ecn.h
 +++ b/include/net/tcp_ecn.h
 @@ -607,6 +607,7 @@ static inline void tcp_ecn_send_syn(struct sock *sk, struct sk_buff *skb)
@@ -271,7 +285,7 @@ index 59d6944f8d103dbe690492caf9fa7173550230eb..ef22e09f141c36355c52ce27774b5cd2
  			TCP_SKB_CB(skb)->tcp_flags |= TCPHDR_AE;
  			tcp_ecn_mode_set(tp, TCP_ECN_MODE_PENDING);
 diff --git a/include/uapi/linux/inet_diag.h b/include/uapi/linux/inet_diag.h
-index 86bb2e8b17c9f197fd49cf7996d5e4f555a9b8e8..9d9a3eb2ce9b7007b68d9bbb5193b2d173813d55 100644
+index 86bb2e8b17c9..9d9a3eb2ce9b 100644
 --- a/include/uapi/linux/inet_diag.h
 +++ b/include/uapi/linux/inet_diag.h
 @@ -229,6 +229,29 @@ struct tcp_bbr_info {
@@ -305,10 +319,10 @@ index 86bb2e8b17c9f197fd49cf7996d5e4f555a9b8e8..9d9a3eb2ce9b7007b68d9bbb5193b2d1
  
  union tcp_cc_info {
 diff --git a/include/uapi/linux/rtnetlink.h b/include/uapi/linux/rtnetlink.h
-index cb4dde8d0f69fdf9fcbf7730cf0c8d63ea44bb47..172601a36411a7fc99d788a5b8f2208484852cc4 100644
+index dab9493c791b..cce4975fdcfe 100644
 --- a/include/uapi/linux/rtnetlink.h
 +++ b/include/uapi/linux/rtnetlink.h
-@@ -520,12 +520,14 @@ enum {
+@@ -517,12 +517,14 @@ enum {
  #define RTAX_FEATURE_TIMESTAMP		(1 << 2) /* unused */
  #define RTAX_FEATURE_ALLFRAG		(1 << 3) /* unused */
  #define RTAX_FEATURE_TCP_USEC_TS	(1 << 4)
@@ -325,7 +339,7 @@ index cb4dde8d0f69fdf9fcbf7730cf0c8d63ea44bb47..172601a36411a7fc99d788a5b8f22084
  struct rta_session {
  	__u8	proto;
 diff --git a/include/uapi/linux/tcp.h b/include/uapi/linux/tcp.h
-index dce3113787a71bbfc2f2674cdfbd61d7cad40029..6efba4f74f6f17d4c85fac866147c211950936cd 100644
+index dce3113787a7..6efba4f74f6f 100644
 --- a/include/uapi/linux/tcp.h
 +++ b/include/uapi/linux/tcp.h
 @@ -185,6 +185,7 @@ enum tcp_fastopen_client_fail {
@@ -337,10 +351,10 @@ index dce3113787a71bbfc2f2674cdfbd61d7cad40029..6efba4f74f6f17d4c85fac866147c211
  /*
   * Sender's congestion state indicating normal or abnormal situations
 diff --git a/net/ipv4/Kconfig b/net/ipv4/Kconfig
-index 8ebb0bf45927150fc55c733861983fba7f2bc99d..cae285a1a7acbe3ac1e6fd5024bf79118ca3016b 100644
+index 06cb9c9c5b9e..244871ba7093 100644
 --- a/net/ipv4/Kconfig
 +++ b/net/ipv4/Kconfig
-@@ -670,15 +670,25 @@ config TCP_CONG_BBR
+@@ -669,15 +669,25 @@ config TCP_CONG_BBR
  	default n
  	help
  
@@ -375,7 +389,7 @@ index 8ebb0bf45927150fc55c733861983fba7f2bc99d..cae285a1a7acbe3ac1e6fd5024bf7911
  
  choice
  	prompt "Default TCP congestion control"
-@@ -717,6 +727,9 @@ choice
+@@ -716,6 +726,9 @@ choice
  	config DEFAULT_BBR
  		bool "BBR" if TCP_CONG_BBR=y
  
@@ -386,7 +400,7 @@ index 8ebb0bf45927150fc55c733861983fba7f2bc99d..cae285a1a7acbe3ac1e6fd5024bf7911
  		bool "Reno"
  endchoice
 diff --git a/net/ipv4/Makefile b/net/ipv4/Makefile
-index ec36d2ec059e800ec840e61a9e480e17c4c585ba..1733e2df22ebf6894889a360045ec61729dbd5c0 100644
+index ec36d2ec059e..1733e2df22eb 100644
 --- a/net/ipv4/Makefile
 +++ b/net/ipv4/Makefile
 @@ -45,6 +45,7 @@ obj-$(CONFIG_INET_TCP_DIAG) += tcp_diag.o
@@ -398,7 +412,7 @@ index ec36d2ec059e800ec840e61a9e480e17c4c585ba..1733e2df22ebf6894889a360045ec617
  obj-$(CONFIG_TCP_CONG_CDG) += tcp_cdg.o
  obj-$(CONFIG_TCP_CONG_CUBIC) += tcp_cubic.o
 diff --git a/net/ipv4/bpf_tcp_ca.c b/net/ipv4/bpf_tcp_ca.c
-index e01492234b0b349498f8e56c2f07d8bba092c00e..27893b774e086d0ccf8015b7c6b78f9a7c17797f 100644
+index e01492234b0b..27893b774e08 100644
 --- a/net/ipv4/bpf_tcp_ca.c
 +++ b/net/ipv4/bpf_tcp_ca.c
 @@ -280,7 +280,7 @@ static void bpf_tcp_ca_pkts_acked(struct sock *sk, const struct ack_sample *samp
@@ -420,10 +434,10 @@ index e01492234b0b349498f8e56c2f07d8bba092c00e..27893b774e086d0ccf8015b7c6b78f9a
  	.undo_cwnd = bpf_tcp_ca_undo_cwnd,
  	.sndbuf_expand = bpf_tcp_ca_sndbuf_expand,
 diff --git a/net/ipv4/tcp.c b/net/ipv4/tcp.c
-index 8c0ffe50ae5d0579451a967d51842fb9e8029f19..b34df270ae96995e9e0fe7d3fc9d8cf36615e5c1 100644
+index 53700d6f6f28..b34df270ae96 100644
 --- a/net/ipv4/tcp.c
 +++ b/net/ipv4/tcp.c
-@@ -3466,6 +3466,7 @@ int tcp_disconnect(struct sock *sk, int flags)
+@@ -3467,6 +3466,7 @@ int tcp_disconnect(struct sock *sk, int flags)
  	tp->rx_opt.dsack = 0;
  	tp->rx_opt.num_sacks = 0;
  	tp->rcv_ooopack = 0;
@@ -431,7 +445,7 @@ index 8c0ffe50ae5d0579451a967d51842fb9e8029f19..b34df270ae96995e9e0fe7d3fc9d8cf3
  
  
  	/* Clean up fastopen related fields */
-@@ -4253,6 +4254,8 @@ void tcp_get_info(struct sock *sk, struct tcp_info *info)
+@@ -4254,6 +4254,8 @@ void tcp_get_info(struct sock *sk, struct tcp_info *info)
  		info->tcpi_options |= TCPI_OPT_ECN;
  	if (tp->ecn_flags & TCP_ECN_SEEN)
  		info->tcpi_options |= TCPI_OPT_ECN_SEEN;
@@ -441,7 +455,7 @@ index 8c0ffe50ae5d0579451a967d51842fb9e8029f19..b34df270ae96995e9e0fe7d3fc9d8cf3
  		info->tcpi_options |= TCPI_OPT_SYN_DATA;
  	if (tp->tcp_usec_ts)
 diff --git a/net/ipv4/tcp_bbr.c b/net/ipv4/tcp_bbr.c
-index 3df6160f515670b068170beafed153cbceb219a9..f1c750f6a44c24964edc27a919fd53bb61075fa8 100644
+index 3df6160f5156..f1c750f6a44c 100644
 --- a/net/ipv4/tcp_bbr.c
 +++ b/net/ipv4/tcp_bbr.c
 @@ -1,18 +1,19 @@
@@ -3088,7 +3102,7 @@ index 3df6160f515670b068170beafed153cbceb219a9..f1c750f6a44c24964edc27a919fd53bb
 +MODULE_VERSION(__stringify(BBR_VERSION));
 diff --git a/net/ipv4/tcp_bbr1.c b/net/ipv4/tcp_bbr1.c
 new file mode 100644
-index 0000000000000000000000000000000000000000..0992ec0b4d892a8b6aa2c2477382c785ceff6ba3
+index 000000000000..0992ec0b4d89
 --- /dev/null
 +++ b/net/ipv4/tcp_bbr1.c
 @@ -0,0 +1,1209 @@
@@ -4302,7 +4316,7 @@ index 0000000000000000000000000000000000000000..0992ec0b4d892a8b6aa2c2477382c785
 +MODULE_LICENSE("Dual BSD/GPL");
 +MODULE_DESCRIPTION("TCP BBR (Bottleneck Bandwidth and RTT)");
 diff --git a/net/ipv4/tcp_cong.c b/net/ipv4/tcp_cong.c
-index e9f6c77e0631631a09f3099fd5af08a041d571df..8e5e77a77e91850d073d8ab0eb0331c66bb0f076 100644
+index e9f6c77e0631..8e5e77a77e91 100644
 --- a/net/ipv4/tcp_cong.c
 +++ b/net/ipv4/tcp_cong.c
 @@ -238,6 +238,7 @@ void tcp_init_congestion_control(struct sock *sk)
@@ -4314,7 +4328,7 @@ index e9f6c77e0631631a09f3099fd5af08a041d571df..8e5e77a77e91850d073d8ab0eb0331c6
  		icsk->icsk_ca_ops->init(sk);
  	if (tcp_ca_needs_ecn(sk))
 diff --git a/net/ipv4/tcp_input.c b/net/ipv4/tcp_input.c
-index 9083f5be31ec3481b5f7f222975c614c67e2dc83..38447ea130b3791dbf5af88ac97e479aa172bdd0 100644
+index 05521a3509a9..8495f29a1869 100644
 --- a/net/ipv4/tcp_input.c
 +++ b/net/ipv4/tcp_input.c
 @@ -358,7 +358,7 @@ static void tcp_data_ecn_check(struct sock *sk, const struct sk_buff *skb)
@@ -4396,7 +4410,7 @@ index 9083f5be31ec3481b5f7f222975c614c67e2dc83..38447ea130b3791dbf5af88ac97e479a
  	}
  }
  
-@@ -4084,6 +4107,7 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
+@@ -4078,6 +4101,7 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
  
  	prior_fack = tcp_is_sack(tp) ? tcp_highest_sack_seq(tp) : tp->snd_una;
  	rs.prior_in_flight = tcp_packets_in_flight(tp);
@@ -4404,7 +4418,7 @@ index 9083f5be31ec3481b5f7f222975c614c67e2dc83..38447ea130b3791dbf5af88ac97e479a
  
  	/* ts_recent update must be made after we are sure that the packet
  	 * is in window.
-@@ -4156,7 +4180,7 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
+@@ -4150,7 +4174,7 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
  	tcp_in_ack_event(sk, flag);
  
  	if (tp->tlp_high_seq)
@@ -4413,7 +4427,7 @@ index 9083f5be31ec3481b5f7f222975c614c67e2dc83..38447ea130b3791dbf5af88ac97e479a
  
  	if (tcp_ack_is_dubious(sk, flag)) {
  		if (!(flag & (FLAG_SND_UNA_ADVANCED |
-@@ -4181,6 +4205,7 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
+@@ -4175,6 +4199,7 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
  
  	lost = tp->lost - lost;			/* freshly marked lost */
  	rs.is_ack_delayed = !!(flag & FLAG_ACK_MAYBE_DELAYED);
@@ -4421,7 +4435,7 @@ index 9083f5be31ec3481b5f7f222975c614c67e2dc83..38447ea130b3791dbf5af88ac97e479a
  	tcp_rate_gen(sk, delivered, lost, is_sack_reneg, sack_state.rate);
  	tcp_cong_control(sk, ack, delivered, flag, sack_state.rate);
  	tcp_xmit_recovery(sk, rexmit);
-@@ -4206,7 +4231,7 @@ no_queue:
+@@ -4200,7 +4225,7 @@ no_queue:
  	tcp_ack_probe(sk);
  
  	if (tp->tlp_high_seq)
@@ -4430,7 +4444,7 @@ index 9083f5be31ec3481b5f7f222975c614c67e2dc83..38447ea130b3791dbf5af88ac97e479a
  	return 1;
  
  old_ack:
-@@ -5930,13 +5955,14 @@ static void __tcp_ack_snd_check(struct sock *sk, int ofo_possible)
+@@ -5924,13 +5949,14 @@ static void __tcp_ack_snd_check(struct sock *sk, int ofo_possible)
  
  	    /* More than one full frame received... */
  	if (((tp->rcv_nxt - tp->rcv_wup) > inet_csk(sk)->icsk_ack.rcv_mss &&
@@ -4448,7 +4462,7 @@ index 9083f5be31ec3481b5f7f222975c614c67e2dc83..38447ea130b3791dbf5af88ac97e479a
  	    tcp_in_quickack_mode(sk) ||
  	    /* Protocol state mandates a one-time immediate ACK */
 diff --git a/net/ipv4/tcp_minisocks.c b/net/ipv4/tcp_minisocks.c
-index a496c26737fdecfc7eff2d56f5d15bb319a54923..933713df7cc30a52744465808189e80e6e2a0308 100644
+index a496c26737fd..933713df7cc3 100644
 --- a/net/ipv4/tcp_minisocks.c
 +++ b/net/ipv4/tcp_minisocks.c
 @@ -501,6 +501,8 @@ void tcp_ca_openreq_child(struct sock *sk, const struct dst_entry *dst)
@@ -4461,7 +4475,7 @@ index a496c26737fdecfc7eff2d56f5d15bb319a54923..933713df7cc30a52744465808189e80e
  		const struct tcp_congestion_ops *ca;
  
 diff --git a/net/ipv4/tcp_output.c b/net/ipv4/tcp_output.c
-index 3f9e11a43f35f95b7a336d616952905f7fbd3d11..604f2eefb87e44c1e670a64f85a497620125c72a 100644
+index 8c10b7d18218..fe9af1490ab8 100644
 --- a/net/ipv4/tcp_output.c
 +++ b/net/ipv4/tcp_output.c
 @@ -347,7 +347,8 @@ static void tcp_ecn_send(struct sock *sk, struct sk_buff *skb,
@@ -4561,7 +4575,7 @@ index 3f9e11a43f35f95b7a336d616952905f7fbd3d11..604f2eefb87e44c1e670a64f85a49762
  		goto rearm_timer;
  
 diff --git a/net/ipv4/tcp_rate.c b/net/ipv4/tcp_rate.c
-index a8f6d9d06f2eb1893c65dec678edb92211fee52f..8737f2134648172106951228c3913b15eb12fbf8 100644
+index a8f6d9d06f2e..8737f2134648 100644
 --- a/net/ipv4/tcp_rate.c
 +++ b/net/ipv4/tcp_rate.c
 @@ -34,6 +34,24 @@
@@ -4641,14 +4655,12 @@ index a8f6d9d06f2eb1893c65dec678edb92211fee52f..8737f2134648172106951228c3913b15
  	rs->interval_us = max(snd_us, ack_us);
  
 diff --git a/net/ipv4/tcp_timer.c b/net/ipv4/tcp_timer.c
-index eb549fea8fdd949755851067d8f33eaecec1252c..8502b10281d618b6ae5b52d6b101144ae440119e 100644
+index 9ebce13fa8ad..8502b10281d6 100644
 --- a/net/ipv4/tcp_timer.c
 +++ b/net/ipv4/tcp_timer.c
-@@ -705,6 +705,7 @@ void tcp_write_timer_handler(struct sock *sk)
- 			       tcp_timeout_expires(sk));
+@@ -706,4 +706,5 @@
  		return;
  	}
 +	tcp_rate_check_app_limited(sk);
  	tcp_mstamp_refresh(tcp_sk(sk));
  	event = icsk->icsk_pending;
- 
