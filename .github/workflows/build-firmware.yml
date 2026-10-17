@@ -11,6 +11,9 @@ on:
         options:
           - an7581.config
           - an7583.config
+          - 1710.config
+          - 2010.config
+          - 2010-2g.config
       release_type:
         description: 'Release Type'
         required: true
