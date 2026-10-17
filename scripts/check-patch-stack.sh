@@ -19,14 +19,15 @@ cd "$(cd "$(dirname "$0")" && pwd)/.." || exit 1
 target="${1:-airoha}"
 ver="$(sed -n 's/^LINUX_VERSION-\([0-9.]*\) *=.*/\1/p' "target/linux/generic/kernel-${KERNEL_PATCHVER:-6.18}" 2>/dev/null | head -n1)"
 [ -n "$ver" ] || { echo "读不到内核版本（target/linux/generic/kernel-*）" >&2; exit 1; }
+suffix="$(sed -n "s/^LINUX_VERSION-${ver} *= *//p" "target/linux/generic/kernel-${ver}" 2>/dev/null | head -n1)"
 
-tarball="$(ls -1 dl/linux-${ver}*.tar.* 2>/dev/null | head -n1)"
-[ -n "$tarball" ] || { echo "dl/ 里没有 linux-${ver}*.tar.* ：请先 make download 或放入 tarball" >&2; exit 1; }
+tarball="$(ls -1 dl/linux-${ver}${suffix}*.tar.* 2>/dev/null | head -n1)"
+[ -n "$tarball" ] || { echo "dl/ 里没有 linux-${ver}${suffix}*.tar.* ：请先 make download 或放入 tarball" >&2; exit 1; }
 
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT INT TERM
 
-echo "内核版本: $ver"
+echo "内核版本: ${ver}${suffix}"
 echo "tarball : $tarball"
 echo "target  : $target"
 echo "解包到  : $tmp/src"
@@ -34,10 +35,10 @@ mkdir -p "$tmp/src"
 tar -xf "$tarball" -C "$tmp/src" --strip-components=1
 
 dirs=(
-	"target/linux/generic/backport-${ver%.*}"
-	"target/linux/generic/pending-${ver%.*}"
-	"target/linux/generic/hack-${ver%.*}"
-	"target/linux/${target}/patches-${ver%.*}"
+	"target/linux/generic/backport-${ver}"
+	"target/linux/generic/pending-${ver}"
+	"target/linux/generic/hack-${ver}"
+	"target/linux/${target}/patches-${ver}"
 )
 
 failed=0
