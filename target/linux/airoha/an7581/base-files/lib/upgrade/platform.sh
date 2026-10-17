@@ -2,6 +2,8 @@ RAMFS_COPY_BIN='fitblk fit_check_sign'
 
 REQUIRE_IMAGE_METADATA=1
 
+. /lib/upgrade/gemtek-ubi.sh
+
 airoha_require_ubi_layout()
 {
 	local ubidev volume fip_volume
@@ -32,7 +34,18 @@ platform_check_image() {
 	[ "$#" -gt 1 ] && return 1
 
 	case "$board" in
+	gemtek,xg2010g-ubi|\
 	gemtek,xg2010g|\
+	gemtek,xg2010g-2g-ubi|\
+	gemtek,xg2010g-2g|\
+	gemtek,xr1710g-ubi)
+		gemtek_ubi_layout_check "$board" || {
+			echo "Unsupported Gemtek UBI layout; refusing sysupgrade."
+			return 1
+		}
+		fit_check_image "$1"
+		return $?
+		;;
 	fiberhome,hg5382a|\
 	fiberhome,hg5585f-ct|\
 	fiberhome,hg5585f-cu|\
@@ -55,11 +68,19 @@ platform_do_upgrade() {
 	local board=$(board_name)
 
 	case "$board" in
+		gemtek,xg2010g-ubi|\
+		gemtek,xg2010g|\
+		gemtek,xg2010g-2g-ubi|\
+		gemtek,xg2010g-2g|\
+		gemtek,xr1710g-ubi)
+			gemtek_ubi_layout_check "$board" &&
+				airoha_require_ubi_layout factory && fit_do_upgrade "$1"
+			;;
 		gemtek,w1700k-ubi|\
+		gemtek,xr1710g|\
 		quantum,q1000k-ubi)
 			fit_do_upgrade "$1"
 			;;
-		gemtek,xg2010g|\
 		fiberhome,hg5382a|\
 		fiberhome,hg5585f-ct|\
 		fiberhome,hg5585f-cu|\
