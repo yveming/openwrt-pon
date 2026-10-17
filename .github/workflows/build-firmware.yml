@@ -103,6 +103,9 @@ jobs:
       - name: Download sources
         run: make download -j$(nproc)
 
+      - name: Check kernel patch stack
+        run: bash scripts/check-patch-stack.sh airoha
+
       - name: Build Firmware
         shell: bash
         run: |
