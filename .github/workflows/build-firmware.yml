@@ -1,0 +1,209 @@
+name: Build Firmware
+
+on:
+  workflow_dispatch:
+    inputs:
+      config_seed:
+        description: 'Build config'
+        required: true
+        default: '1710.config'
+        type: choice
+        options:
+          - 1710.config
+          - 2010.config
+          - 2010-2g.config
+      release_type:
+        description: 'Release Type'
+        required: true
+        default: 'none'
+        type: choice
+        options:
+          - none
+          - release
+          - prerelease
+      release_notes:
+        description: 'Release Notes'
+        required: false
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Generate build version
+        id: version
+        run: |
+          git remote add upstream https://github.com/immortalwrt/immortalwrt.git 2>/dev/null || true
+          git remote set-url upstream https://github.com/immortalwrt/immortalwrt.git
+          git fetch --no-tags upstream master
+
+          build_date=$(TZ=Asia/Shanghai date +'%Y%m%d')
+          repo_commit=$(git rev-parse --short=8 HEAD)
+          upstream_base=$(git merge-base HEAD upstream/master)
+          upstream_commit=$(git rev-parse --short=8 "$upstream_base")
+          build_id="${build_date}-${repo_commit}-${upstream_commit}"
+          # 文件名只保留 “日期-本机commit”，完整 build_id 落到 VERSION_CODE
+          version_number="${build_date}-${repo_commit}"
+          version_code="${build_id}"
+
+          echo "date=$build_date" >> $GITHUB_OUTPUT
+          echo "build_id=$build_id" >> $GITHUB_OUTPUT
+          echo "repo_commit=$repo_commit" >> $GITHUB_OUTPUT
+          echo "upstream_commit=$upstream_commit" >> $GITHUB_OUTPUT
+          echo "version_number=$version_number" >> $GITHUB_OUTPUT
+          echo "version_code=$version_code" >> $GITHUB_OUTPUT
+          case '${{ inputs.config_seed }}' in
+            1710.config) device_model=XR1710G ;;
+            2010.config) device_model=XG2010G ;;
+            2010-2g.config) device_model=XG2010G-2G ;;
+            *) echo "Unsupported config seed: ${{ inputs.config_seed }}" >&2; exit 1 ;;
+          esac
+          echo "device_model=$device_model" >> $GITHUB_OUTPUT
+          echo "Build version: ImmortalWrt-for-Gemtek-brightspeed $device_model $version_number"
+
+      - name: Setup build environment
+        run: |
+          sudo apt update
+          sudo apt install -y build-essential clang gcc g++ binutils bzip2 gawk gettext git libncurses-dev libssl-dev python3 python3-setuptools rsync unzip wget xsltproc zlib1g-dev file which perl sed make
+
+      - name: Install feeds
+        run: |
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
+          bash scripts/fix-stale-golang-host.sh
+
+      - name: Apply feed patches
+        run: FEED_PATCHES_STRICT=1 bash scripts/apply-feed-patches.sh
+
+      - name: Configure
+        run: |
+          cp '${{ inputs.config_seed }}' .config
+          BUILD_DATE='${{ steps.version.outputs.date }}' \
+          BUILD_ID='${{ steps.version.outputs.build_id }}' \
+          REPO_COMMIT='${{ steps.version.outputs.repo_commit }}' \
+          UPSTREAM_COMMIT='${{ steps.version.outputs.upstream_commit }}' \
+          VERSION_CODE='${{ steps.version.outputs.version_code }}' \
+          bash scripts/set-build-version.sh .config
+          make defconfig
+          bash scripts/check-gemtek-profile-isolation.sh --config .config
+          grep -E 'CONFIG_(IMAGEOPT|EXTRA_IMAGE_NAME|VERSIONOPT|VERSION_DIST|VERSION_NUMBER|VERSION_CODE|VERSION_FILENAMES|VERSION_CODE_FILENAMES)[= ]' .config
+
+      - name: Download sources
+        run: make download -j$(nproc)
+
+      - name: Build Firmware
+        shell: bash
+        run: |
+          make -j2 world 2>&1 | tee build.log
+
+      - name: Verbose retry on build failure
+        if: failure()
+        shell: bash
+        run: |
+          failed_pkg=$(grep 'ERROR:.*failed to build' build.log | head -1 | sed 's/.*ERROR: \(.*\) failed to build.*/\1/' || true)
+          if [ -n "$failed_pkg" ]; then
+            echo "=== Rebuilding $failed_pkg with V=s ==="
+            make "package/$failed_pkg/compile" V=s -j1 2>&1 | tee build-verbose.log || true
+            echo "=== First errors in build-verbose.log ==="
+            grep -nE "error:|Error [0-9]|FAILED|Patch failed|No rule to make target" build-verbose.log | head -40 || true
+            echo "=== tail of build-verbose.log ==="
+            tail -80 build-verbose.log || true
+          else
+            echo "No failing package found in build.log" >&2
+            tail -150 build.log || true
+          fi
+
+      - name: Verify device isolation
+        shell: bash
+        run: |
+          bash scripts/check-firmware-artifacts.sh \
+            --config .config \
+            --directory bin/targets/airoha/an7581
+          kernel_config=$(find build_dir/target-aarch64_cortex-a53_musl/linux-airoha_an7581 -path '*/linux-*/.config' -print -quit)
+          manifest=$(find bin/targets/airoha/an7581 -maxdepth 1 -type f -name '*manifest' -print -quit)
+          test -n "$kernel_config"
+          test -n "$manifest"
+          bash scripts/check-gemtek-profile-isolation.sh \
+            --config .config \
+            --kernel-config "$kernel_config" \
+            --manifest "$manifest"
+
+      - name: Check build status
+        if: always()
+        run: |
+          if [ -f build.log ]; then
+            bash scripts/summarize-build-errors.sh build.log || true
+            tail -100 build.log
+          fi
+          echo "=== List all files in bin/targets/airoha/an7581/ ==="
+          ls -la bin/targets/airoha/an7581/ 2>/dev/null || echo "No files found in an7581 directory"
+          echo "=== List all files in bin/targets/airoha/ ==="
+          ls -la bin/targets/airoha/ 2>/dev/null || echo "No files found in airoha directory"
+          echo "=== List all files in bin/targets/ ==="
+          ls -la bin/targets/ 2>/dev/null || echo "No files found in targets directory"
+          echo "=== List all files in bin/ ==="
+          ls -la bin/ 2>/dev/null || echo "No files found in bin directory"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: gemtek-${{ inputs.config_seed }}-firmware
+          path: |
+            build.log
+            build-verbose.log
+            bin/targets/airoha/an7581/*.itb
+            bin/targets/airoha/an7581/*manifest
+            bin/targets/airoha/an7581/config.buildinfo
+            bin/targets/airoha/an7581/feeds.buildinfo
+            bin/targets/airoha/an7581/version.buildinfo
+            bin/targets/airoha/an7581/sha256sums
+          retention-days: 30
+        if: always()
+
+      - name: Build release body
+        if: github.event.inputs.release_type != 'none'
+        id: release_body
+        env:
+          RELEASE_NOTES: ${{ github.event.inputs.release_notes }}
+        run: |
+          {
+            printf '%s\n' "$RELEASE_NOTES"
+            echo ""
+            echo "---"
+            echo ""
+            echo "如果您觉得对您有帮助，请我喝杯咖啡吧，让我更有动力持续更新。"
+            echo ""
+            echo '<img width="400" height="400" alt="c6ea388c976395326514814f80d512d5" src="https://github.com/user-attachments/assets/0ac90d58-ac73-4dc1-b926-276e539e5d0f" />'
+          } > /tmp/release_body.md
+          {
+            echo "body<<EOF"
+            cat /tmp/release_body.md
+            echo "EOF"
+          } >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        if: github.event.inputs.release_type != 'none'
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ format('{0}-{1}', steps.version.outputs.date, steps.version.outputs.repo_commit) }}
+          name: ${{ format('{0} - Gemtek {1} Build ({2})', steps.version.outputs.date, steps.version.outputs.device_model, steps.version.outputs.repo_commit) }}
+          body: ${{ steps.release_body.outputs.body }}
+          draft: false
+          prerelease: ${{ github.event.inputs.release_type == 'prerelease' }}
+          files: |
+            bin/targets/airoha/an7581/*.itb
+            bin/targets/airoha/an7581/config.buildinfo
+            bin/targets/airoha/an7581/feeds.buildinfo
+            bin/targets/airoha/an7581/version.buildinfo
+            bin/targets/airoha/an7581/sha256sums
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
