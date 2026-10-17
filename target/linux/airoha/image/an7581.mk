@@ -151,6 +151,108 @@ define Device/gemtek_xg2010g
 	fitblk nand-utils ubi-utils
 endef
 TARGET_DEVICES += gemtek_xg2010g
+define Device/gemtek_xr1710g-common
+  DEVICE_VENDOR := Gemtek
+  DEVICE_MODEL := XR1710G
+  # Retail branding only. Keep it out of DEVICE_ALT0_*: Device/Dump emits one
+  # Target Profile entry per ALT name on top of the primary one, so an alias
+  # here would print two menu lines for every XR1710G layout.
+  DEVICE_DESCRIPTION := Gemtek XR1710G, also sold as Brightspeed XR1710G
+  DEVICE_PACKAGES := airoha-en7581-mt7996-npu-firmware airoha-an7581-mt7996-board \
+		    kmod-nf-conntrack-bridge kmod-nft-bridge \
+		    fitblk uboot-envtools \
+		    kmod-hwmon-nct7802 kmod-mt7996-firmware wpad-mesh-mbedtls \
+		    rtl826x-firmware px5g-mbedtls \
+		    -kmod-airoha-tod -kmod-airoha-en7581-pcm-spi
+  UBINIZE_OPTS := -E 5
+  BLOCKSIZE := 128k
+  PAGESIZE := 2048
+  UBOOTENV_IN_UBI := 1
+  KERNEL_IN_UBI := 1
+  KERNEL := kernel-bin | gzip
+  KERNEL_INITRAMFS := kernel-bin | lzma | \
+	fit lzma $$(KDIR)/image-$$(firstword $$(DEVICE_DTS)).dtb with-initrd | pad-to 128k
+  KERNEL_INITRAMFS_SUFFIX := -recovery.itb
+  IMAGES := sysupgrade.itb
+  IMAGE/sysupgrade.itb := append-kernel | fit gzip $$(KDIR)/image-$$(firstword $$(DEVICE_DTS)).dtb external-static-with-rootfs | append-metadata
+  SOC := an7581
+endef
+
+define Device/gemtek_xr1710g
+  # DEVICE_DTS must be set before the common block: the common IMAGE/KERNEL
+  # lines use := and freeze $(firstword $(DEVICE_DTS)) at eval time.
+  DEVICE_DTS := an7581-xr1710g
+  $(call Device/gemtek_xr1710g-common)
+  SUPPORTED_DEVICES := gemtek,xr1710g
+endef
+TARGET_DEVICES += gemtek_xr1710g
+
+define Device/gemtek_xr1710g-ubi
+  DEVICE_DTS := an7581-gemtek-xr1710g-ubi
+  $(call Device/gemtek_xr1710g-common)
+  # Layout goes into DEVICE_VARIANT (like nokia_xg-040g-md-ubi), not into
+  # DEVICE_MODEL: that keeps the title free of a "(...)" suffix and the menu
+  # list at one line per layout. Matches gemtek_xg2010g-ubi in this file.
+  DEVICE_VARIANT := UBI
+  SUPPORTED_DEVICES := gemtek,xr1710g-ubi
+  DEVICE_COMPAT_VERSION := 2.0
+  DEVICE_COMPAT_MESSAGE := Firmware requires the XR1710G OpenWrt U-Boot UBI layout \
+       with bl2 at 0x00000000 and the UBI partition extending from \
+       0x00020000 to the end of NAND. Restore the complete 2 MiB stock DSD \
+       main-data image to the static factory volume before booting Linux.
+endef
+TARGET_DEVICES += gemtek_xr1710g-ubi
+
+define Device/gemtek_xg2010g-common
+  DEVICE_VENDOR := Gemtek
+  DEVICE_COMPAT_VERSION := 2.0
+  DEVICE_COMPAT_MESSAGE := Firmware requires the XG2010G OpenWrt U-Boot UBI layout \
+       with bl2 at 0x00000000 and ubi starting at 0x00020000, containing \
+       fip, ubootenv, ubootenv2, factory and fit. Do not force an upgrade from \
+       the legacy 0x00600000 layout. Preserve bl2 and the boot/calibration volumes.
+  DEVICE_PACKAGES := fitblk kmod-leds-gpio kmod-gpio-button-hotplug \
+	kmod-phy-airoha-en8811h kmod-phy-realtek rtl826x-firmware \
+	kmod-nf-conntrack-bridge kmod-nft-bridge \
+	kmod-airoha-en7572 kmod-airoha-xpon airoha-ponctl airoha-pond \
+	kmod-airoha-tod kmod-airoha-en7581-pcm-spi \
+	-airoha-an7581-mt7996-board -airoha-en7581-mt7996-npu-firmware \
+	-kmod-mac80211 -kmod-mt7996-firmware -kmod-mt7996e \
+	-wpad-mbedtls -wpad-mesh-mbedtls -wireless-regdb
+  BLOCKSIZE := 128k
+  PAGESIZE := 2048
+  UBINIZE_OPTS := -E 5
+  KERNEL_IN_UBI := 1
+  KERNEL := kernel-bin | gzip
+  IMAGES := sysupgrade.itb
+  # The dynamic UBI fit volume is recreated to the uploaded image size.
+  # The 128 MiB package limit is independent of UBI volume placement.
+  IMAGE_SIZE := 131072k
+  IMAGE/sysupgrade.itb := append-kernel | \
+	fit gzip $$(KDIR)/image-$$(firstword $$(DEVICE_DTS)).dtb external-static-with-rootfs | \
+	append-metadata | check-size
+  SOC := an7581
+endef
+
+define Device/gemtek_xg2010g-ubi
+  # DEVICE_DTS must be set before the common block: the common IMAGE line
+  # uses := and freezes $(firstword $(DEVICE_DTS)) at eval time.
+  DEVICE_DTS := an7581-gemtek-xg2010g-ubi
+  $(call Device/gemtek_xg2010g-common)
+  DEVICE_MODEL := XG2010G
+  DEVICE_VARIANT := UBI
+  SUPPORTED_DEVICES := gemtek,xg2010g-ubi gemtek,xg2010g
+endef
+TARGET_DEVICES += gemtek_xg2010g-ubi
+
+define Device/gemtek_xg2010g-2g-ubi
+  DEVICE_DTS := an7581-gemtek-xg2010g-2g-ubi
+  $(call Device/gemtek_xg2010g-common)
+  DEVICE_MODEL := XG2010G (2 GiB)
+  DEVICE_VARIANT := UBI
+  SUPPORTED_DEVICES := gemtek,xg2010g-2g-ubi gemtek,xg2010g-2g
+endef
+TARGET_DEVICES += gemtek_xg2010g-2g-ubi
+
 
 define Device/nokia_valyrian
   DEVICE_VENDOR := Nokia

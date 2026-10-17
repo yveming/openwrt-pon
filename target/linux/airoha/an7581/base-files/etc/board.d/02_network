@@ -7,6 +7,11 @@
 . /lib/functions/system.sh
 
 
+gemtek_setup_interfaces()
+{
+	ucidef_set_interfaces_lan_wan "lan2 lan3 lan4" "wan"
+}
+
 an7581_setup_interfaces()
 {
 	local board="$1"
@@ -24,9 +29,18 @@ an7581_setup_interfaces()
 		ucidef_set_interfaces_lan_wan "lan1 lan2 lan3 lan4" "eth1"
 		;;
 	gemtek,w1700k-ubi)
-		ucidef_set_interfaces_lan_wan "lan2 lan3 lan4" "wan"
+		gemtek_setup_interfaces
 		;;
-	gemtek,xg2010g)
+	gemtek,xr1710g|\
+	gemtek,xr1710g-ubi)
+		ucidef_set_hostname "XR1710G"
+		gemtek_setup_interfaces
+		;;
+	gemtek,xg2010g-ubi|\
+	gemtek,xg2010g|\
+	gemtek,xg2010g-2g-ubi|\
+	gemtek,xg2010g-2g)
+		ucidef_set_hostname "XG2010G"
 		# Panel order is two RTL8261N 10G ports, EN8811H 2.5G, then switch 1G.
 		ucidef_set_interfaces_lan_wan "lan1 lan2 lan3 lan4" "pon0"
 		;;
