@@ -1,0 +1,106 @@
+--- a/src/mrib.h
++++ b/src/mrib.h
+@@ -80,6 +80,9 @@
+ // Add interface to filter
+ int mrib_filter_add(mrib_filter *filter, struct mrib_user *user);
+ 
++// Re-evaluate forwarding state of all known sources of a group
++void mrib_refresh_user(struct mrib_user *user, const struct in6_addr *group);
++
+ // Send IGMP-packet
+ int mrib_send_igmp(struct mrib_querier *querier, struct igmpv3_query *igmp, size_t len,
+ 		const struct sockaddr_in *dest);
+--- a/src/mrib.c
++++ b/src/mrib.c
+@@ -173,15 +173,23 @@
+ 	return i;
+ }
+ 
++// Build the forwarding-filter for a (group, source) pair from all users
++static void mrib_filter_build(struct mrib_iface *iface,
++		const struct in6_addr *group, const struct in6_addr *source,
++		mrib_filter *filter)
++{
++	struct mrib_user *user;
++	list_for_each_entry(user, &iface->users, head)
++		if (user->cb_newsource)
++			user->cb_newsource(user, group, source, filter);
++}
++
+ // Notify all users of a new multicast source
+ static void mrib_notify_newsource(struct mrib_iface *iface,
+ 		const struct in6_addr *group, const struct in6_addr *source)
+ {
+ 	mrib_filter filter = 0;
+-	struct mrib_user *user;
+-	list_for_each_entry(user, &iface->users, head)
+-		if (user->cb_newsource)
+-			user->cb_newsource(user, group, source, &filter);
++	mrib_filter_build(iface, group, source, &filter);
+ 
+ 	char groupbuf[INET6_ADDRSTRLEN], sourcebuf[INET6_ADDRSTRLEN];
+ 	inet_ntop(AF_INET6, group, groupbuf, sizeof(groupbuf));
+@@ -203,6 +211,29 @@
+ 	}
+ }
+ 
++// Re-evaluate the forwarding state of all known sources of a group
++// (e.g. after a downstream membership change). Sources are usually
++// detected before the first downstream member subscribes, in which
++// case their multicast route is installed as a placeholder without
++// outgoing interfaces and would only be re-evaluated after the
++// regular lifetime-based cleanup otherwise.
++void mrib_refresh_user(struct mrib_user *user, const struct in6_addr *group)
++{
++	struct mrib_iface *iface = user->iface;
++	if (!iface)
++		return;
++
++	struct mrib_route *c;
++	list_for_each_entry(c, &iface->routes, head) {
++		if (!IN6_ARE_ADDR_EQUAL(&c->group, group))
++			continue;
++
++		mrib_filter filter = 0;
++		mrib_filter_build(iface, &c->group, &c->source, &filter);
++		mrib_set(&c->group, &c->source, iface, filter, 0);
++	}
++}
++
+ // Calculate IGMP-checksum
+ static uint16_t igmp_checksum(const uint16_t *buf, size_t len)
+ {
+--- a/src/proxy.c
++++ b/src/proxy.c
+@@ -35,6 +35,7 @@
+ 	struct querier_user_iface iface;
+ 	struct mrib_user mrib;
+ 	struct client client;
++	struct proxy *proxy;
+ 	enum proxy_flags flags;
+ };
+ 
+@@ -92,8 +93,13 @@
+ 		bool include, const struct in6_addr *sources, size_t len)
+ {
+ 	struct proxy_downlink *iface = container_of(user, struct proxy_downlink, iface);
+-	if (proxy_match_scope(iface->flags, group))
++	if (proxy_match_scope(iface->flags, group)) {
+ 		client_set(&iface->client, group, include, sources, len);
++
++		// Re-evaluate the forwarding state of all known sources of this
++		// group, as source detection may have happened before membership
++		mrib_refresh_user(&iface->proxy->mrib, group);
++	}
+ }
+ 
+ // Remove proxy with given name
+@@ -181,6 +187,8 @@
+ 		if (!downlink)
+ 			goto err;
+ 
++		downlink->proxy = proxy;
++
+ 		if (client_init(&downlink->client, uplink))
+ 			goto downlink_err3;
+ 
