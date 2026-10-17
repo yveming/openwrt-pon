@@ -97,6 +97,9 @@ jobs:
           bash scripts/check-profile-isolation.sh --config .config
           grep -E 'CONFIG_(IMAGEOPT|EXTRA_IMAGE_NAME|VERSIONOPT|VERSION_DIST|VERSION_NUMBER|VERSION_CODE|VERSION_FILENAMES|VERSION_CODE_FILENAMES)[= ]' .config
 
+      - name: Check seed symbols
+        run: bash scripts/check-seed-symbols.sh 'configs/${{ inputs.config_seed }}'
+
       - name: Download sources
         run: make download -j$(nproc)
 
