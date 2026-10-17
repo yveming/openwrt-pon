@@ -94,13 +94,18 @@ feed 没挂上、包被移出主树时，符号会被 Kconfig **静默丢弃**�
   所以 `master` 只能跟随 pbs05。若要"`master` = 官方镜像"这种更顺的逻辑，需要新建一个
   `yveming/immortalwrt` fork，把 `pon` 分支搬过去、默认分支设为 `pon`，并把 CI / secrets / releases
   迁过去；本仓库可保留为发布/文档仓库或归档。代价是一次迁移，收益是 fork 语义正确、可直接向官方提 PR。
-- 本地遗留分支可清理：`legacy-master-ci`（无独有内容）、`legacy-master`（内容已由 tag
-  `state-2026-10-17-pre-migration` 在远端留档）；远端旧分支 `kernel-fix-fraglist-gro-multicast` 也可删。
+- 本地遗留分支已清理（`legacy-master`、`legacy-master-ci`）；远端旧分支
+  `kernel-fix-fraglist-gro-multicast` 也可删 —— 它的提交已在 `master`/`pon` 里（见"已知的历史坑"）。
 
 ## 已知的历史坑
 
 - `image/an7581.mk` 里的 `gemtek_xr1710g*` / `gemtek_xg2010g-ubi` / `gemtek_xg2010g-2g-ubi`
   曾被对齐 pbs05 时覆盖掉，导致三个出货配置引用的 profile 全部落空（见 CHANGELOG）。
   合并设备表时务必确认 profile 定义还在。
+- **fraglist GRO**：`target/linux/airoha/patches-6.18/980-revert-fraglist-gro-by-default.patch`
+  把 Airoha 的 fraglist GRO 改成"路由式 IPv4 组播下 opt-in"（对应上游 openwrt 的相关讨论仍在进行）。
+  一旦上游（openwrt 或 kernel）接收了正式的 fraglist/GRO 修复，需要重新评估这个补丁是否还必要；
+  上游 bump 内核时 `scripts/check-patch-stack.sh` 会先把冲突暴露出来 —— 提交过 PR 的那个分支
+  (`kernel-fix-fraglist-gro-multicast`) 只是这个补丁的引入点，其提交已在 `master`/`pon` 里，不必保留。
 - `patches/feeds/<feed>/...` 只对 `feeds.conf.default` 里存在的 feed 生效；feed 被移除后
   目录要一起删，否则构建前会打印 "feed is not present" 并跳过。
