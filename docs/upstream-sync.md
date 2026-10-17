@@ -58,15 +58,25 @@ git switch pon && git merge --no-edit topic-xxx
 
 - `target/linux/airoha/{dts,image,base-files}` 的**设备表**：取并集（本产品同时出货
   XR1710G/XG2010G 与 FiberHome/Nokia/ZNXT/H3C/UnionMan 两套设备线）
-- 上游补丁文件被双方都改过时：优先保留能让补丁 `git apply` 干净的版本，另一侧的内容
-  拆成追加补丁
+- **`target/linux/**/patches-*`（L1 内核补丁栈）：只能取一家，不能取并集。**
+  pbs05 与 naoki66 对同一个内核各维护一套完整补丁，混用会出现"同号不同名""同功能
+  两份实现""补丁对当前内核已失效"等情况；`patch-kernel.sh` 失败即 `exit 1`，
+  所以一旦混用构建必炸。基准取 naoki66（其设备线与本产品一致），pbs05 独有的补丁
+  逐个追加，每追加一个都要过 `scripts/check-patch-stack.sh`。
+  历史教训：合并时 L1 混用导致 14 个补丁失败；naoki66 的 `914/914b` 本身已对
+  6.18.55 失效（在他们上游仓库同样套不上），已删除，PCIe 由 `220-10/609-04/913` 覆盖
 - 纯产品开关（wireguard、i2c-tools 等）：以 `configs/*.config` 为准
 
 ## 校验
 
 ```sh
+# 1) 内核补丁链能不能干净套用（2 分钟，不需要 swig/python3-setuptools）
+scripts/check-patch-stack.sh airoha
+
+# 2) 种子符号是否还有效（每个种子跑一次 defconfig）
 ./scripts/feeds update -a && ./scripts/feeds install -a
 scripts/check-seed-symbols.sh configs/1710.config configs/2010.config configs/2010-2g.config
+#   或一次全部：scripts/check-seed-symbols.sh
 ```
 
 `check-seed-symbols.sh` 会在 `make defconfig` 之后断言种子配置里选中的包仍然生效 ——
