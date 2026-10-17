@@ -17,9 +17,9 @@
 #     once -- when staging_dir/host/.prereq-build is first created -- so a feed
 #     refresh would slip straight past it.
 #
-# The script is idempotent (an already-patched feed reports "already applied"
-# and is skipped), so the steady-state cost is one `git apply --check` per
-# patch file.
+# The script is idempotent (an already-patched feed is detected and skipped),
+# and quiet in that steady state, so the normal build prints nothing here.
+# FEED_PATCHES_VERBOSE=1 restores the full per-patch report.
 #
 # A feed that has not been fetched yet is skipped with a warning, not an error:
 # this target runs *before* prepare-tmpinfo's own recipe, which is what creates

@@ -68,7 +68,7 @@ jobs:
             *) echo "Unsupported config seed: ${{ inputs.config_seed }}" >&2; exit 1 ;;
           esac
           echo "device_model=$device_model" >> $GITHUB_OUTPUT
-          echo "Build version: ImmortalWrt-for-Gemtek-brightspeed $device_model $version_number"
+          echo "Build version: openwrt pon $version_number"
 
       - name: Setup build environment
         run: |
@@ -86,7 +86,7 @@ jobs:
 
       - name: Configure
         run: |
-          cp '${{ inputs.config_seed }}' .config
+          cp 'configs/${{ inputs.config_seed }}' .config
           BUILD_DATE='${{ steps.version.outputs.date }}' \
           BUILD_ID='${{ steps.version.outputs.build_id }}' \
           REPO_COMMIT='${{ steps.version.outputs.repo_commit }}' \
@@ -94,7 +94,7 @@ jobs:
           VERSION_CODE='${{ steps.version.outputs.version_code }}' \
           bash scripts/set-build-version.sh .config
           make defconfig
-          bash scripts/check-gemtek-profile-isolation.sh --config .config
+          bash scripts/check-profile-isolation.sh --config .config
           grep -E 'CONFIG_(IMAGEOPT|EXTRA_IMAGE_NAME|VERSIONOPT|VERSION_DIST|VERSION_NUMBER|VERSION_CODE|VERSION_FILENAMES|VERSION_CODE_FILENAMES)[= ]' .config
 
       - name: Download sources
@@ -132,7 +132,7 @@ jobs:
           manifest=$(find bin/targets/airoha/an7581 -maxdepth 1 -type f -name '*manifest' -print -quit)
           test -n "$kernel_config"
           test -n "$manifest"
-          bash scripts/check-gemtek-profile-isolation.sh \
+          bash scripts/check-profile-isolation.sh \
             --config .config \
             --kernel-config "$kernel_config" \
             --manifest "$manifest"
@@ -156,7 +156,7 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v7
         with:
-          name: gemtek-${{ inputs.config_seed }}-firmware
+          name: openwrt-pon-${{ inputs.config_seed }}-firmware
           path: |
             build.log
             build-verbose.log
@@ -177,12 +177,6 @@ jobs:
         run: |
           {
             printf '%s\n' "$RELEASE_NOTES"
-            echo ""
-            echo "---"
-            echo ""
-            echo "如果您觉得对您有帮助，请我喝杯咖啡吧，让我更有动力持续更新。"
-            echo ""
-            echo '<img width="400" height="400" alt="c6ea388c976395326514814f80d512d5" src="https://github.com/user-attachments/assets/0ac90d58-ac73-4dc1-b926-276e539e5d0f" />'
           } > /tmp/release_body.md
           {
             echo "body<<EOF"
@@ -195,7 +189,7 @@ jobs:
         uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ format('{0}-{1}', steps.version.outputs.date, steps.version.outputs.repo_commit) }}
-          name: ${{ format('{0} - Gemtek {1} Build ({2})', steps.version.outputs.date, steps.version.outputs.device_model, steps.version.outputs.repo_commit) }}
+          name: ${{ format('openwrt pon {0} ({1})', steps.version.outputs.date, steps.version.outputs.repo_commit) }}
           body: ${{ steps.release_body.outputs.body }}
           draft: false
           prerelease: ${{ github.event.inputs.release_type == 'prerelease' }}

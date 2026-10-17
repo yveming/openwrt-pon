@@ -1,10 +1,14 @@
 src-git packages https://github.com/immortalwrt/packages.git
 src-git luci https://github.com/immortalwrt/luci.git
+src-git --directory=luci-theme-glass glass https://github.com/rchen14b/luci-theme-glass.git;main
 src-git routing https://github.com/openwrt/routing.git
 src-git telephony https://github.com/openwrt/telephony.git
-src-git video https://github.com/openwrt/video.git
-src-git pon_drivers https://github.com/pbs05/openwrt-pon-drivers.git
-src-git pon_userspace https://github.com/pbs05/openwrt-pon-userspace.git
+src-git pon_drivers https://github.com/yveming/openwrt-pon-drivers.git
+src-git onu_config https://github.com/naoki66/OpenWrt_ONU_CONFIG.git
 #src-git targets https://github.com/openwrt/targets.git
 #src-git oldpackages http://git.openwrt.org/packages.git
 #src-link custom /usr/src/openwrt/custom-feed
+src-git pon_userspace https://github.com/pbs05/openwrt-pon-userspace.git
+
+# PonWrt 外置包（官方基座没有的包集中在这里）
+src-git pon_feed https://github.com/yveming/openwrt-pon-feed.git
