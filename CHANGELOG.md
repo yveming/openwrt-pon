@@ -3,6 +3,51 @@
 本文件记录固件仓库的重要功能、稳定性和维护变更。常规的
 ImmortalWrt 上游合并不逐项展开，仅记录会影响本设备构建或运行行为的内容。
 
+## 2026-10-18
+
+### 仓库结构迁移到 `pon` 分支模型
+
+- `master` = `immortalwrt/immortalwrt` 纯镜像（只允许 fast-forward），`pon` = 产品分支
+  （仓库默认分支）。pbs05 / naoki66 不再以 git 血缘整体并入，改为"可挑选的来源"。
+- 上游同步不再由 CI 自动合并：`.github/workflows/check-upstream.yml` 只检测并开 issue，
+  合并由本地按 `docs/upstream-sync.md` 执行。来源锁定见 `vendor.lock` +
+  `scripts/sync-vendors.sh`。
+
+### 修复 XR1710G / XG2010G UBI 出货配置无 profile 可用
+
+- `image/an7581.mk` 的 `gemtek_xr1710g*`、`gemtek_xg2010g-ubi`、`gemtek_xg2010g-2g-ubi`
+  以及 `board.d/{01_leds,02_network,03_pon_data}`、`upgrade/platform.sh` 里的
+  `gemtek,xr1710g*` 分支，在上一轮 pbs05 对齐中被覆盖丢失 —— 导致
+  `1710.config` / `2010.config` / `2010-2g.config` 引用的 profile 全部落空，
+  XR1710G 会落到 `*)` 打印 "Unsupported hardware"。现已补回。
+
+### 内核补丁栈（L1）重建为单一供应商基准
+
+- 两个供应商对同一个内核各维护一套补丁，合并后混用导致 **14 个补丁无法套用**；
+  `patch-kernel.sh` 失败即 `exit 1`，即构建无法产出镜像。
+- 现以 naoki66 的补丁栈为基准（其设备线与本产品一致），并保留产品需要的追加补丁：
+  `928`（UPDMEM IPv6 源 MAC）、`951`（BBRv3 拥塞控制）、`743`（RTL8261 USXGMII inband）。
+- 删除 pbs05 的 14 个 `675-*`（与 naoki66 的同属一条 bridge-flowtable 序列、编号方案不同）、
+  `170`/`310-12`/`930`（被 `182`/`9994` 取代）、以及已对 6.18.55 失效的 `914`/`914b`
+  （naoki66 上游同样套不上；PCIe PERST 由 `220-10`/`609-04`/`913` 覆盖）。
+
+### 供应商包外置到 feed
+
+- 新增 `src-git pon_feed https://github.com/yveming/openwrt-pon-feed.git`，
+  收纳官方基座没有的 15 个包（`luci-app-airoha-*`、`airoha-voice`、`asterisk-chan-en75xx`、
+  `luci-app-mlo`、`clientstatus` 系列、`airoha-an7581-mt7996-board`、`znxt-zn515-mt7916-eeprom`、
+  `kmod-nf-nathelper-fcc`、`luci-app-{mesh-conf,netmode}` 等），主树只留官方基座与产品补丁。
+- 主树删除这些包与 `lucky`（包出树、符号悬空）。
+
+### 构建前守卫
+
+- `scripts/check-seed-symbols.sh`：`make defconfig` 之后断言种子选中的符号仍在
+  —— 防的是"包被移出主树 / feed 未挂上"导致的**静默丢包**。
+- `scripts/check-patch-stack.sh`：不编译即可验证整条内核补丁链能否干净套用。
+- 两者都已接进 `build-firmware.yml`（defconfig 之后、编译之前）。
+- 顺带修正：`configs/*.config` 删除 lucky、统一关闭 wireguard、去掉 i2c-tools、
+  补回官方自带的 `video` feed、清理上游已不存在的僵尸符号。
+
 ## 2026-10-12
 
 ### 合并对齐策略
