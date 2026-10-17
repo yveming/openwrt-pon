@@ -1,0 +1,71 @@
+name: Check Upstream
+
+# 只检测、只提醒，绝不自动合并 —— 合并由本地按 docs/upstream-sync.md 执行。
+on:
+  schedule:
+    - cron: '0 19 */3 * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Fetch upstream
+        run: |
+          git remote add upstream https://github.com/immortalwrt/immortalwrt.git 2>/dev/null || true
+          git remote set-url upstream https://github.com/immortalwrt/immortalwrt.git
+          git fetch --no-tags upstream master
+
+      - name: Compare with upstream
+        id: cmp
+        run: |
+          base="$(sed -n 's/^upstream=//p' vendor.lock | head -n1)"
+          echo "vendor.lock 基线: ${base:0:8}"
+          echo "上游 tip:        $(git rev-parse --short upstream/master)"
+          if git merge-base --is-ancestor upstream/master HEAD; then
+            echo "behind=0" >> "$GITHUB_OUTPUT"
+          else
+            echo "behind=$(git rev-list --count HEAD..upstream/master)" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Summary
+        run: |
+          if [ "${{ steps.cmp.outputs.behind }}" = "0" ]; then
+            echo "上游没有新提交。" >> "$GITHUB_STEP_SUMMARY"
+          else
+            {
+              echo "### 上游有 ${{ steps.cmp.outputs.behind }} 个提交待合并"
+              echo
+              echo '```sh'
+              echo 'scripts/sync-vendors.sh'
+              echo 'git fetch upstream && git switch pon && git merge upstream/master'
+              echo 'git fetch pbs05    && git merge pbs05/master   # 需要时'
+              echo 'scripts/check-seed-symbols.sh configs/*.config'
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Open or update tracking issue
+        if: steps.cmp.outputs.behind != '0'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          existing="$(gh issue list --state open --limit 100 --json number,title \
+            --jq '[.[] | select(.title | startswith("上游有"))][0].number // empty')"
+          body="$(printf '检测到 immortalwrt 上游新增 **%s** 个提交。\n\n合并基线见 `vendor.lock`，流程见 `docs/upstream-sync.md`。\n\n```sh\nscripts/sync-vendors.sh\ngit fetch upstream && git switch pon && git merge upstream/master\nscripts/check-seed-symbols.sh configs/*.config\n```\n\n合并完成后请更新 `vendor.lock` 并关闭本 issue。' "${{ steps.cmp.outputs.behind }}")"
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --body "$body"
+          else
+            gh issue create \
+              --title "上游有 ${{ steps.cmp.outputs.behind }} 个提交待合并" \
+              --body "$body"
+          fi
