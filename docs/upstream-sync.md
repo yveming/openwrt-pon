@@ -8,17 +8,21 @@
 
 | 分支 | 定义 | 规则 |
 | --- | --- | --- |
-| `master` | `immortalwrt/immortalwrt` 的**纯镜像** | 只允许 `git merge --ff-only upstream/master`，不提交任何本地改动 |
-| `pon` | 产品分支 = `master` + 产品层 | 仓库默认分支，发布 tag 打在这里 |
+| `master` | `pbs05/ponwrt` 的**纯镜像** | 本仓库是它的 GitHub fork，官方页面的 "Sync fork" 同步的就是它 —— 点了没问题。不提交任何本地改动，只允许 fast-forward |
+| `pon` | 产品分支（= pbs05 产品层 + naoki66 线 + 官方基座 + 我们的改动） | 仓库默认分支，发布 tag 打在这里 |
 | `topic-*` | 单用途分支（一个修复一条） | 从 `pon` 拉出，合回 `pon`；上游化的补丁在这里先成型 |
+
+> 说明：**官方的 `immortalwrt/immortalwrt` 只通过下面的 `upstream` remote 跟踪**，
+> `pon` 直接从它合并（`git merge upstream/master`）。仓库的 fork 关系挂在 pbs05 上
+> （GitHub 不支持改父仓库），所以 `master` 跟随 pbs05 是预期行为，不是"主线混乱"。
 
 远程：
 
 ```
 origin     yveming/openwrt-pon                                （可写，默认分支 = pon）
-upstream   immortalwrt/immortalwrt                              只读
-pbs05      pbs05/ponwrt                                         只读，产品层（设备/镜像 profile）
-naoki66    naoki66/ImmortalWrt-for-Gemtek-brightspeed           只读，XR1710G 线（只挑单个补丁）
+upstream   immortalwrt/immortalwrt                             只读，官方基座，pon 的合并来源
+pbs05      pbs05/ponwrt                                        只读，产品层（设备/镜像 profile），也是 master 的同步来源
+naoki66    naoki66/ImmortalWrt-for-Gemtek-brightspeed          只读，XR1710G 线（只挑单个补丁）
 ```
 
 `git remote set-url --push <vendor> DISABLED_READ_ONLY` 已设置，防止误推。
