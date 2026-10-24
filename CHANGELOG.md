@@ -23,6 +23,10 @@ ImmortalWrt 上游合并不逐项展开，仅记录会影响本设备构建或�
 - `an7583`、`en7523` 的 `config-6.18` 补上
   `# CONFIG_AIROHA_PON_COMPAT is not set`；该符号由 `920-xg2010g-pon-20`
   引入，未写入子目标内核配置时 `syncconfig` 会把它当作 NEW 符号并报错。
+- `scripts/check-firmware-artifacts.sh` 改为按 `.config` 实际选中的设备逐个
+  校验 ITB（优先 sysupgrade，只有 initramfs 的设备回退到 initramfs），不再只
+  认 Gemtek profile；修复 an7581/an7583 构建成功后 `Verify device artifacts`
+  误报 “no supported Gemtek firmware profile”。
 - 设备树：`an7581-evb-emmc.dtsi` 随上游删除（`max-link-speed=<2>` 已在新的
   `an7581-evb-multievb.dts` 中）；EN8811H 的 1s/100ms 复位时序移到
   `an7583-evb-emmc.dtso`；`image/an7581.mk`、`an7583.mk` 采用上游 multi-evb
