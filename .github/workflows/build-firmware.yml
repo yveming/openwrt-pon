@@ -97,8 +97,13 @@ jobs:
           VERSION_CODE='${{ steps.version.outputs.version_code }}' \
           bash scripts/set-build-version.sh .config
           make defconfig
-          bash scripts/check-profile-isolation.sh --config .config
           grep -E 'CONFIG_(IMAGEOPT|EXTRA_IMAGE_NAME|VERSIONOPT|VERSION_DIST|VERSION_NUMBER|VERSION_CODE|VERSION_FILENAMES|VERSION_CODE_FILENAMES)[= ]' .config
+
+      # 只对 Gemtek 单设备配置生效；an7581/an7583 是多设备产品线，
+      # check-profile-isolation.sh 会以 "unsupported Gemtek profile" 退出。
+      - name: Check Gemtek profile isolation
+        if: inputs.config_seed == '1710.config' || inputs.config_seed == '2010.config' || inputs.config_seed == '2010-2g.config'
+        run: bash scripts/check-profile-isolation.sh --config .config
 
       - name: Check seed symbols
         run: bash scripts/check-seed-symbols.sh 'configs/${{ inputs.config_seed }}'
