@@ -6,6 +6,6 @@
 #
 # 用法：scripts/sync-vendors.sh 会读取这里的值，打印各来源相对基线的增量。
 # 合并/挑选完成后，把对应行更新为新 tip。
-upstream=2248ed75465327b4eed0ffcc3ece361dc1e62d75
-pbs05=edaeeb300c9d71149f2fa1ee15e9afc2d7eb4c26
+upstream=e695009c15c623f4f6a83376b505faaf7a4ae5b5
+pbs05=03c134544714617e196dd399c85ebb90fb6eefa1
 naoki66=c15760c70b7ceeb85fd852d081b06c4bcac1cf5c
