@@ -20,6 +20,9 @@ ImmortalWrt 上游合并不逐项展开，仅记录会影响本设备构建或�
   `airoha_dev_stop()` 内条件化 `phylink_stop/disconnect_phy`，该补丁成为重复项，
   且旧 hunk 上下文过于宽泛，会在新基座上误套到 `airoha_fe_mc_vlan_clear()`。
   补丁链 674 个全部干净套用，`target/linux/compile` 通过。
+- `an7583`、`en7523` 的 `config-6.18` 补上
+  `# CONFIG_AIROHA_PON_COMPAT is not set`；该符号由 `920-xg2010g-pon-20`
+  引入，未写入子目标内核配置时 `syncconfig` 会把它当作 NEW 符号并报错。
 - 设备树：`an7581-evb-emmc.dtsi` 随上游删除（`max-link-speed=<2>` 已在新的
   `an7581-evb-multievb.dts` 中）；EN8811H 的 1s/100ms 复位时序移到
   `an7583-evb-emmc.dtso`；`image/an7581.mk`、`an7583.mk` 采用上游 multi-evb
