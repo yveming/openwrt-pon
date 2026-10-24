@@ -28,44 +28,107 @@ jobs:
       - name: Compare with upstream
         id: cmp
         run: |
+          set -euo pipefail
           base="$(sed -n 's/^upstream=//p' vendor.lock | head -n1)"
+          tip="$(git rev-parse upstream/master)"
+          merge_base="$(git merge-base HEAD upstream/master)"
           echo "vendor.lock 基线: ${base:0:8}"
-          echo "上游 tip:        $(git rev-parse --short upstream/master)"
+          echo "上游 tip:        ${tip:0:8}"
+          echo "merge-base:      ${merge_base:0:8}"
+
+          {
+            echo "base=$base"
+            echo "tip=$tip"
+          } >> "$GITHUB_OUTPUT"
+
           if git merge-base --is-ancestor upstream/master HEAD; then
             echo "behind=0" >> "$GITHUB_OUTPUT"
+            echo "conflicts=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          behind="$(git rev-list --count HEAD..upstream/master)"
+          echo "behind=$behind" >> "$GITHUB_OUTPUT"
+
+          # 双方都动过的文件 —— 真正 merge 时的高概率冲突面（仅预览，不做合并）。
+          ours="$(git diff --name-only "$merge_base" HEAD | sort -u)"
+          theirs="$(git diff --name-only "$merge_base" upstream/master | sort -u)"
+          conflicts="$(comm -12 <(printf '%s\n' "$ours") <(printf '%s\n' "$theirs") | awk 'NR<=40')"
+          if [ -n "$conflicts" ]; then
+            {
+              echo "conflicts<<EOF_CONFLICTS"
+              printf '%s\n' "$conflicts"
+              echo "EOF_CONFLICTS"
+            } >> "$GITHUB_OUTPUT"
           else
-            echo "behind=$(git rev-list --count HEAD..upstream/master)" >> "$GITHUB_OUTPUT"
+            echo "conflicts=" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Summary
         run: |
-          if [ "${{ steps.cmp.outputs.behind }}" = "0" ]; then
+          set -euo pipefail
+          behind='${{ steps.cmp.outputs.behind }}'
+          if [ "$behind" = "0" ]; then
             echo "上游没有新提交。" >> "$GITHUB_STEP_SUMMARY"
-          else
-            {
-              echo "### 上游有 ${{ steps.cmp.outputs.behind }} 个提交待合并"
-              echo
-              echo '```sh'
-              echo 'scripts/sync-vendors.sh'
-              echo 'git fetch upstream && git switch pon && git merge upstream/master'
-              echo 'git fetch pbs05    && git merge pbs05/master   # 需要时'
-              echo 'scripts/check-seed-symbols.sh configs/*.config'
-              echo '```'
-            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
           fi
+          conflicts='${{ steps.cmp.outputs.conflicts }}'
+          {
+            echo "### 上游有 ${behind} 个提交待合并"
+            echo
+            echo '```sh'
+            echo 'scripts/sync-vendors.sh'
+            echo 'git fetch upstream && git switch pon && git merge upstream/master'
+            echo 'git fetch pbs05    && git merge pbs05/master   # 需要时'
+            echo 'scripts/check-patch-stack.sh airoha'
+            echo 'scripts/check-seed-symbols.sh configs/*.config'
+            echo '```'
+            if [ -n "$conflicts" ]; then
+              echo
+              echo '<details><summary>双方都改过的文件（合并时重点看）</summary>'
+              echo
+              echo '```'
+              echo "$conflicts"
+              echo '```'
+              echo '</details>'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Open or update tracking issue
         if: steps.cmp.outputs.behind != '0'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          set -euo pipefail
           existing="$(gh issue list --state open --limit 100 --json number,title \
             --jq '[.[] | select(.title | startswith("上游有"))][0].number // empty')"
-          body="$(printf '检测到 immortalwrt 上游新增 **%s** 个提交。\n\n合并基线见 `vendor.lock`，流程见 `docs/upstream-sync.md`。\n\n```sh\nscripts/sync-vendors.sh\ngit fetch upstream && git switch pon && git merge upstream/master\nscripts/check-seed-symbols.sh configs/*.config\n```\n\n合并完成后请更新 `vendor.lock` 并关闭本 issue。' "${{ steps.cmp.outputs.behind }}")"
+          base='${{ steps.cmp.outputs.base }}'
+          tip='${{ steps.cmp.outputs.tip }}'
+          behind='${{ steps.cmp.outputs.behind }}'
+          conflicts='${{ steps.cmp.outputs.conflicts }}'
+          body="$(printf '检测到 immortalwrt 上游新增 **%s** 个提交。\n\n`vendor.lock` 基线：`%s`，上游 tip：`%s`。\n\n合并流程见 `docs/upstream-sync.md`。\n\n```sh\nscripts/sync-vendors.sh\ngit fetch upstream && git switch pon && git merge upstream/master\nscripts/check-patch-stack.sh airoha\nscripts/check-seed-symbols.sh configs/*.config\n```\n\n合并完成后请更新 `vendor.lock` 并关闭本 issue。' "$behind" "${base:0:8}" "${tip:0:8}")"
+          if [ -n "$conflicts" ]; then
+            body+=$'\n\n<details><summary>双方都改过的文件（合并时重点看）</summary>\n\n```\n'
+            body+="$conflicts"
+            body+=$'\n```\n\n</details>'
+          fi
           if [ -n "$existing" ]; then
             gh issue comment "$existing" --body "$body"
           else
             gh issue create \
-              --title "上游有 ${{ steps.cmp.outputs.behind }} 个提交待合并" \
+              --title "上游有 ${behind} 个提交待合并" \
               --body "$body"
+          fi
+
+      - name: Close tracking issue when up to date
+        if: steps.cmp.outputs.behind == '0'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          existing="$(gh issue list --state open --limit 100 --json number,title \
+            --jq '[.[] | select(.title | startswith("上游有"))][0].number // empty')"
+          if [ -n "$existing" ]; then
+            gh issue close "$existing" \
+              --comment "上游已同步到 $(printf '%.8s' '${{ steps.cmp.outputs.tip }}')。"
           fi
