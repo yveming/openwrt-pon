@@ -33,6 +33,14 @@ ImmortalWrt 上游合并不逐项展开，仅记录会影响本设备构建或�
   结构并保留全部产品 profile，Nokia 设备补回 `automount`。
 - `configs/*.config` 删除内核已移除的 `CONFIG_KERNEL_REISER_FS_POSIX_ACL`。
 
+### 构建产物命名
+
+- 恢复 `ponwrt-` 镜像名前缀：`scripts/set-build-version.sh` 不再默认注入
+  `ImmortalWrt naoki66` 和首个设备型号，改为 `PonWrt`；`1710`、`2010`、
+  `2010-2g` 种子的 `CONFIG_VERSION_DIST` 同步改为 `PonWrt`。CI 产物从
+  `immortalwrt-naoki66-[device-]日期-commit-...` 回到
+  `ponwrt-日期-commit-...`。
+
 ### 修好上游提醒与自动合并
 
 - 删除 `sync-upstream.yml`（旧模型遗留：默认分支改 `pon` 后会把 upstream 合进
