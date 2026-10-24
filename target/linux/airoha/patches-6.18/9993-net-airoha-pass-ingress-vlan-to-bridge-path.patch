@@ -19,17 +19,20 @@ performs the same tag push or pop selected by the bridge path.
 
 Signed-off-by: Yanghan Ye <yyh94306@gmail.com>
 ---
+diff --git a/drivers/net/ethernet/airoha/airoha_ppe.c b/drivers/net/ethernet/airoha/airoha_ppe.c
+index 144ba47..fc74cb8 100644
 --- a/drivers/net/ethernet/airoha/airoha_ppe.c
 +++ b/drivers/net/ethernet/airoha/airoha_ppe.c
-@@ -12,6 +12,7 @@
+@@ -12,6 +12,8 @@
  #include <linux/platform_device.h>
  #include <linux/rhashtable.h>
  #include <net/ipv6.h>
 +#include <linux/if_bridge.h>
- #include <linux/if_vlan.h>
++#include <linux/if_vlan.h>
  #include <net/pkt_cls.h>
  #include <net/route.h>
-@@ -983,10 +984,13 @@
+ 
+@@ -1354,10 +1356,13 @@ airoha_ppe_foe_prepare_bridge_subflow(struct airoha_ppe *ppe,
  				      struct airoha_foe_entry *hwe)
  {
  	struct net_device_path_stack stack;
@@ -44,7 +47,7 @@ Signed-off-by: Yanghan Ye <yyh94306@gmail.com>
  
  	if (!is_valid_ether_addr(eh->h_source) ||
  	    !is_valid_ether_addr(eh->h_dest))
-@@ -998,18 +1002,45 @@
+@@ -1369,18 +1374,45 @@ airoha_ppe_foe_prepare_bridge_subflow(struct airoha_ppe *ppe,
  	if (!skb->dev)
  		return false;
  
@@ -96,7 +99,7 @@ Signed-off-by: Yanghan Ye <yyh94306@gmail.com>
  	if (err || stack.num_paths < 2 ||
  	    stack.path[0].type != DEV_PATH_BRIDGE) {
  		rcu_read_unlock();
-@@ -1017,6 +1048,12 @@
+@@ -1388,6 +1420,12 @@ airoha_ppe_foe_prepare_bridge_subflow(struct airoha_ppe *ppe,
  		return false;
  	}
  

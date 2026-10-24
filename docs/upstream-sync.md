@@ -9,7 +9,7 @@
 | 分支 | 定义 | 规则 |
 | --- | --- | --- |
 | `master` | `pbs05/ponwrt` 的**纯镜像** | 本仓库是它的 GitHub fork，官方页面的 "Sync fork" 同步的就是它 —— 点了没问题。不提交任何本地改动，只允许 fast-forward |
-| `pon` | 产品分支（= pbs05 产品层 + naoki66 线 + 官方基座 + 我们的改动） | 仓库默认分支，发布 tag 打在这里 |
+| `pon` | 产品分支（= 官方基座 + 产品补丁：设备集、XR1710G 线、产品化） | 仓库默认分支，发布 tag 打在这里 |
 | `topic-*` | 单用途分支（一个修复一条） | 从 `pon` 拉出，合回 `pon`；上游化的补丁在这里先成型 |
 
 > 说明：**官方的 `immortalwrt/immortalwrt` 只通过下面的 `upstream` remote 跟踪**，
@@ -62,14 +62,16 @@ git switch pon && git merge --no-edit topic-xxx
 
 - `target/linux/airoha/{dts,image,base-files}` 的**设备表**：取并集（本产品同时出货
   XR1710G/XG2010G 与 FiberHome/Nokia/ZNXT/H3C/UnionMan 两套设备线）
-- **`target/linux/**/patches-*`（L1 内核补丁栈）：只能取一家，不能取并集。**
-  pbs05 与 naoki66 对同一个内核各维护一套完整补丁，混用会出现"同号不同名""同功能
-  两份实现""补丁对当前内核已失效"等情况；`patch-kernel.sh` 失败即 `exit 1`，
-  所以一旦混用构建必炸。**本产品线就是 pbs05 的设备集，因此基准取 pbs05**，
-  仓库自有的追加补丁（如 `928`）逐个叠加，每叠一个都要过
-  `scripts/check-patch-stack.sh`。
-  历史教训：合并时 L1 混用导致 14 个补丁失败；naoki66 的 `914/914b` 也早已对
-  6.18.55 失效（在他们上游仓库同样套不上），随其整套补丁一并弃用。
+- **`target/linux/**/patches-*`（L1 内核补丁栈）：以官方系列为基座，产品补丁按功能叠加，同一功能只保留一份实现。**
+  不能再把 pbs05 / naoki66 的整套补丁直接并集：三方对同一个内核各维护一套补丁，
+  直接相加会出现"同号不同名""同功能两份实现""补丁对当前内核已失效"等情况，
+  `patch-kernel.sh` 失败即 `exit 1`。
+  当前基准是**官方 `185-194` 系列**（随 upstream 合并更新），产品侧只保留
+  设备/XR1710G 线真正需要的补丁（如 `922/925/930`、`920-xg2010g-pon-*`、
+  `928`、`9990/9993`、`9999-*`）；官方已有同功能实现的旧副本一律删除，
+  不叠加。每改一个补丁都要过 `scripts/check-patch-stack.sh`。
+  历史教训：直接把两家的 L1 并集导致 14 个补丁失败；naoki66 的 `914/914b`
+  对 6.18.55 已失效，已随整套补丁弃用。
 - 纯产品开关（wireguard、i2c-tools 等）：以 `configs/*.config` 为准
 
 ## 校验

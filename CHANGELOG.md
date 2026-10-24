@@ -3,6 +3,32 @@
 本文件记录固件仓库的重要功能、稳定性和维护变更。常规的
 ImmortalWrt 上游合并不逐项展开，仅记录会影响本设备构建或运行行为的内容。
 
+## 2026-10-25
+
+### 同步 immortalwrt 上游（179 个提交）
+
+- 合并 `immortalwrt/immortalwrt` `2248ed7546..e695009c15`（179 个提交），
+  `vendor.lock` 的 `upstream` 基线随之前移到 `e695009c15`。
+- 上游把 airoha 补丁系列整体重做（`916-02` → `194-v7.2` LRO、`920-16` 由
+  `190/191` 取代、`920-12` → `193-03`、`310-10` 重写并已包含 `port->lock`
+  统计锁修复），AN7581/AN7583 EVB 改为 multi-evb DTS + overlay。
+- 本地处理：保留上游新系列；删除被取代的旧副本（`182`、`923-01/02`、
+  `920-12/16`、`916-02`、`9994`）；产品补丁 `922/925/930` 改用 pbs05 已在
+  新基座上 rebase 的版本，`920-xg2010g-pon-17/20`、`9990/9993` 重新 rebase；
+  新增 pbs05 的 `924`（NPU mailbox coherent DMA）。补丁链 675 个全部干净套用。
+- 设备树：`an7581-evb-emmc.dtsi` 随上游删除（`max-link-speed=<2>` 已在新的
+  `an7581-evb-multievb.dts` 中）；EN8811H 的 1s/100ms 复位时序移到
+  `an7583-evb-emmc.dtso`；`image/an7581.mk`、`an7583.mk` 采用上游 multi-evb
+  结构并保留全部产品 profile，Nokia 设备补回 `automount`。
+- `configs/*.config` 删除内核已移除的 `CONFIG_KERNEL_REISER_FS_POSIX_ACL`。
+
+### 修好上游提醒与自动合并
+
+- 删除 `sync-upstream.yml`（旧模型遗留：默认分支改 `pon` 后会把 upstream 合进
+  `pon` 却 push master，且绕过补丁链校验）。
+- `check-upstream.yml` 增加"双方都改过的文件"预览，`behind=0` 时自动关闭跟踪
+  issue；仓库重新打开 Issues（fork 默认关闭，之前 `createIssue` 一直 403）。
+
 ## 2026-10-18
 
 ### 仓库结构迁移到 `pon` 分支模型
@@ -23,6 +49,9 @@ ImmortalWrt 上游合并不逐项展开，仅记录会影响本设备构建或�
   不含 XR1710G；这些条目保留是为了不丢失已修好的设备支持。
 
 ### 内核补丁栈（L1）基准 = pbs05
+
+> 2026-10-25 起该描述已过时：L1 已改为"官方系列 + 产品补丁"，旧的整套
+> pbs05 叠法不再适用，详见上方 2026-10-25 条目。
 
 - 两个供应商对同一个内核各维护一套补丁，合并后混用导致 **14 个补丁无法套用**；
   `patch-kernel.sh` 失败即 `exit 1`，即构建无法产出镜像。

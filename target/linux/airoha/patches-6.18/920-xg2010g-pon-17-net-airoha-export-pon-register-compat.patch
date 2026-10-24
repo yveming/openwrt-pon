@@ -13,10 +13,10 @@ The switch window is mapped only when the board marks the Ethernet node with
 airoha,pon-compat. No IRQ is requested by this compatibility layer.
 
 diff --git a/drivers/net/ethernet/airoha/airoha_eth.c b/drivers/net/ethernet/airoha/airoha_eth.c
-index 433a646..d474b26 100644
+index 9abd924..b2a891a 100644
 --- a/drivers/net/ethernet/airoha/airoha_eth.c
 +++ b/drivers/net/ethernet/airoha/airoha_eth.c
-@@ -17,6 +17,19 @@
+@@ -20,6 +20,19 @@
  #include "airoha_regs.h"
  #include "airoha_eth.h"
  
@@ -36,7 +36,7 @@ index 433a646..d474b26 100644
  u32 airoha_rr(void __iomem *base, u32 offset)
  {
  	return readl(base + offset);
-@@ -1345,6 +1358,172 @@ static int airoha_qdma_init_irq_banks(struct platform_device *pdev,
+@@ -1776,6 +1789,172 @@ static int airoha_qdma_init_irq_banks(struct platform_device *pdev,
  	return 0;
  }
  
@@ -207,9 +207,9 @@ index 433a646..d474b26 100644
 +EXPORT_SYMBOL(ecnt_ppe_get_buffer_base);
 +
  static int airoha_qdma_init(struct platform_device *pdev,
-			    struct airoha_eth *eth,
-			    struct airoha_qdma *qdma)
-@@ -2920,6 +3093,7 @@ static int airoha_probe(struct platform_device *pdev)
+ 			    struct airoha_eth *eth,
+ 			    struct airoha_qdma *qdma)
+@@ -4114,6 +4293,7 @@ static int airoha_probe(struct platform_device *pdev)
  	struct device_node *np;
  	struct airoha_eth *eth;
  	int i, err;
@@ -217,7 +217,7 @@ index 433a646..d474b26 100644
  
  	eth = devm_kzalloc(&pdev->dev, sizeof(*eth), GFP_KERNEL);
  	if (!eth)
-@@ -2938,6 +3112,19 @@ static int airoha_probe(struct platform_device *pdev)
+@@ -4136,6 +4316,19 @@ static int airoha_probe(struct platform_device *pdev)
  		return dev_err_probe(eth->dev, PTR_ERR(eth->fe_regs),
  				     "failed to iomap fe regs\n");
  
@@ -237,28 +237,29 @@ index 433a646..d474b26 100644
  	eth->rsts[0].id = "fe";
  	eth->rsts[1].id = "pdma";
  	eth->rsts[2].id = "qdma";
-@@ -2993,6 +3180,8 @@ static int airoha_probe(struct platform_device *pdev)
- 		}
- 	}
+@@ -4203,6 +4396,8 @@ static int airoha_probe(struct platform_device *pdev)
+ 	if (err)
+ 		goto error_napi_stop;
  
 +	WRITE_ONCE(airoha_pon_eth, eth);
 +
  	return 0;
  
  error_napi_stop:
-@@ -4377,5 +4377,7 @@ static void airoha_remove(struct platform_device *pdev)
+@@ -4247,6 +4442,8 @@ static void airoha_remove(struct platform_device *pdev)
  	struct airoha_eth *eth = platform_get_drvdata(pdev);
  	int i;
  
 +	WRITE_ONCE(airoha_pon_eth, NULL);
 +
- 	for (i = 0; i < ARRAY_SIZE(eth->qdma); i++)
+ 	for (i = 0; i < ARRAY_SIZE(eth->qdma); i++) {
  		airoha_qdma_stop_napi(&eth->qdma[i]);
+ 		airoha_qdma_tx_cleanup(&eth->qdma[i]);
 diff --git a/drivers/net/ethernet/airoha/airoha_eth.h b/drivers/net/ethernet/airoha/airoha_eth.h
-index cd13c1c..1ee1496 100644
+index f8a15a6..50c70e5 100644
 --- a/drivers/net/ethernet/airoha/airoha_eth.h
 +++ b/drivers/net/ethernet/airoha/airoha_eth.h
-@@ -580,6 +580,11 @@ struct airoha_eth {
+@@ -682,6 +682,11 @@ struct airoha_eth {
  
  	struct airoha_qdma qdma[AIROHA_MAX_NUM_QDMA];
  	struct airoha_gdm_port *ports[AIROHA_MAX_NUM_GDM_PORTS];
@@ -270,5 +271,3 @@ index cd13c1c..1ee1496 100644
  };
  
  u32 airoha_rr(void __iomem *base, u32 offset);
---
-2.47.0

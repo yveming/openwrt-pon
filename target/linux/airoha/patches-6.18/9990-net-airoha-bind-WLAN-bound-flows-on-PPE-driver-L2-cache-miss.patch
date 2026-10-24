@@ -48,16 +48,19 @@ Signed-off-by: Jihong Min <hurryman2212@gmail.com>
 Assisted-by: Codex:gpt-5.6-sol
 Signed-off-by: Yanghan Ye <yyh94306@gmail.com>
 ---
+diff --git a/drivers/net/ethernet/airoha/airoha_ppe.c b/drivers/net/ethernet/airoha/airoha_ppe.c
+index 75c45a3..144ba47 100644
 --- a/drivers/net/ethernet/airoha/airoha_ppe.c
 +++ b/drivers/net/ethernet/airoha/airoha_ppe.c
-@@ -7,5 +7,6 @@
+@@ -6,6 +6,7 @@
+ 
  #include <linux/airoha-eth.h>
  #include <linux/ip.h>
 +#include <linux/etherdevice.h>
  #include <linux/ipv6.h>
  #include <linux/of_platform.h>
  #include <linux/platform_device.h>
-@@ -708,65 +708,236 @@
+@@ -1213,75 +1214,245 @@ void airoha_ppe_remove_egress_flows(struct airoha_gdm_dev *dev)
  }
  
  static int
@@ -90,11 +93,24 @@ Signed-off-by: Yanghan Ye <yyh94306@gmail.com>
 +	hwe.ib1 = (hwe.ib1 & mask) | (bridge->ib1 & ~mask);
  
  	type = FIELD_GET(AIROHA_FOE_IB1_BIND_PACKET_TYPE, hwe.ib1);
+ 	if (airoha_is_7581(ppe->eth) && type == PPE_PKT_TYPE_BRIDGE) {
+ 		/* Preserve the hardware-learned ingress key, including source MAC. */
+-		hwe.l2b.data = e->data.bridge.data;
+-		hwe.l2b.ib2 = e->data.bridge.ib2;
+-		hwe.l2b.vlan1 = e->data.bridge.l2.common.vlan1;
+-		hwe.l2b.vlan2 = e->data.bridge.l2.common.vlan2;
+-		hwe.l2b.etype = e->data.bridge.l2.common.etype;
++		hwe.l2b.data = bridge->bridge.data;
++		hwe.l2b.ib2 = bridge->bridge.ib2;
++		hwe.l2b.vlan1 = bridge->bridge.l2.common.vlan1;
++		hwe.l2b.vlan2 = bridge->bridge.l2.common.vlan2;
++		hwe.l2b.etype = bridge->bridge.l2.common.etype;
+ 		goto commit;
+ 	}
  	if (type >= PPE_PKT_TYPE_IPV6_ROUTE_3T) {
 -		memcpy(&hwe.ipv6.l2, &e->data.bridge.l2, sizeof(hwe.ipv6.l2));
 -		hwe.ipv6.ib2 = e->data.bridge.ib2;
-+		memcpy(&hwe.ipv6.l2, &bridge->bridge.l2,
-+		       sizeof(hwe.ipv6.l2));
++		memcpy(&hwe.ipv6.l2, &bridge->bridge.l2, sizeof(hwe.ipv6.l2));
 +		hwe.ipv6.ib2 = bridge->bridge.ib2;
  		/* setting smac_id to 0xf instruct the hw to keep original
  		 * source mac address
@@ -113,8 +129,9 @@ Signed-off-by: Yanghan Ye <yyh94306@gmail.com>
  	}
  
 -	hwe.bridge.data = e->data.bridge.data;
--	airoha_ppe_foe_commit_entry(ppe, &hwe, hash, rx_wlan);
 +	hwe.bridge.data = bridge->bridge.data;
+ commit:
+-	airoha_ppe_foe_commit_entry(ppe, &hwe, hash, rx_wlan);
 +	return airoha_ppe_foe_commit_entry(ppe, &hwe, hash, rx_wlan);
 +}
 +
@@ -313,17 +330,27 @@ Signed-off-by: Yanghan Ye <yyh94306@gmail.com>
  	spin_lock_bh(&ppe_lock);
  
  	hwe = airoha_ppe_foe_get_entry_locked(ppe, hash);
-@@ -903,2 +1073,3 @@ static void airoha_ppe_foe_insert_entry(
+@@ -1309,7 +1480,8 @@ static void airoha_ppe_foe_insert_entry(struct airoha_ppe *ppe,
+ 			continue;
+ 		}
+ 
 -		if (!airoha_ppe_foe_compare_entry(e, hwe))
 +		if ((local && e->type == FLOW_TYPE_L2) ||
 +		    !airoha_ppe_foe_compare_entry(e, hwe))
  			continue;
-@@ -911,2 +1082,4 @@ static void airoha_ppe_foe_insert_entry(
+ 
+ 		airoha_ppe_foe_commit_entry(ppe, &e->data, hash, rx_wlan);
+@@ -1319,6 +1491,8 @@ static void airoha_ppe_foe_insert_entry(struct airoha_ppe *ppe,
+ 
  	if (commit_done)
  		goto unlock;
 +	if (local)
 +		goto unlock;
-@@ -917,2 +1088,4 @@ static void airoha_ppe_foe_insert_entry(
+ 
+ l2_lookup:
+ 	airoha_ppe_foe_set_bridge_addrs(&br, eth_hdr(skb));
+@@ -1326,6 +1500,8 @@ l2_lookup:
+ 				   airoha_l2_flow_table_params);
  	if (e)
  		airoha_ppe_foe_commit_subflow_entry(ppe, e, hash, rx_wlan);
 +	else if (bridge_ready)
