@@ -1,0 +1,43 @@
+From: FiberHome HG5582A port <dev@example.invalid>
+Subject: [PATCH] guard socket and interface macros
+
+musl's <bits/ioctl.h> defines SIOCGSTAMP/SIOCGSTAMPNS and <net/if.h>
+defines IFF_VOLATILE.  The kernel UAPI headers define the same names with
+the same values, which trips -Werror in netifd.  Keep the libc definition
+when one is already present.
+
+--- a/include/uapi/linux/sockios.h
++++ b/include/uapi/linux/sockios.h
+--- a/include/uapi/linux/sockios.h
++++ b/include/uapi/linux/sockios.h
+@@ -37,6 +37,7 @@
+ /* Get stamp (timespec) */
+ #define SIOCGSTAMPNS_NEW _IOR(SOCK_IOC_TYPE, 0x07, long long[2])
+ 
++#ifndef SIOCGSTAMP
+ #if __BITS_PER_LONG == 64 || (defined(__x86_64__) && defined(__ILP32__))
+ /* on 64-bit and x32, avoid the ?: operator */
+ #define SIOCGSTAMP	SIOCGSTAMP_OLD
+@@ -47,6 +48,7 @@
+ #define SIOCGSTAMPNS	((sizeof(struct timespec)) == 8 ? \
+ 			 SIOCGSTAMPNS_OLD : SIOCGSTAMPNS_NEW)
+ #endif
++#endif
+ 
+ /* Routing table calls. */
+ #define SIOCADDRT	0x890B		/* add routing table entry	*/
+--- a/include/uapi/linux/if.h
++++ b/include/uapi/linux/if.h
+--- a/include/uapi/linux/if.h
++++ b/include/uapi/linux/if.h
+@@ -133,8 +133,10 @@
+ #define IFF_ECHO			IFF_ECHO
+ #endif /* __UAPI_DEF_IF_NET_DEVICE_FLAGS_LOWER_UP_DORMANT_ECHO */
+ 
++#ifndef IFF_VOLATILE
+ #define IFF_VOLATILE	(IFF_LOOPBACK|IFF_POINTOPOINT|IFF_BROADCAST|IFF_ECHO|\
+ 		IFF_MASTER|IFF_SLAVE|IFF_RUNNING|IFF_LOWER_UP|IFF_DORMANT)
++#endif
+ 
+ #define IF_GET_IFACE	0x0001		/* for querying only */
+ #define IF_GET_PROTO	0x0002
