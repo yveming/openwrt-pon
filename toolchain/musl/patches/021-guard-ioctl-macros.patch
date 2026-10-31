@@ -1,0 +1,30 @@
+From: FiberHome HG5582A port <dev@example.invalid>
+Subject: [PATCH] guard ioctl command macros
+
+The Linux UAPI <asm-generic/ioctl.h> and musl's <bits/ioctl.h> both
+define the _IOC command-encoding family.  Packages that include both
+headers (urngd and the voice control utility are examples) fail when the
+second definition is diagnosed under -Werror.  Since both encodings are
+compatible, keep the first definition and skip the duplicate.
+
+--- a/arch/generic/bits/ioctl.h
++++ b/arch/generic/bits/ioctl.h
+--- a/arch/generic/bits/ioctl.h
++++ b/arch/generic/bits/ioctl.h
+@@ -1,12 +1,16 @@
++#ifndef _IOC
+ #define _IOC(a,b,c,d) ( ((a)<<30) | ((b)<<8) | (c) | ((d)<<16) )
+ #define _IOC_NONE  0U
+ #define _IOC_WRITE 1U
+ #define _IOC_READ  2U
++#endif
+ 
++#ifndef _IO
+ #define _IO(a,b) _IOC(_IOC_NONE,(a),(b),0)
+ #define _IOW(a,b,c) _IOC(_IOC_WRITE,(a),(b),sizeof(c))
+ #define _IOR(a,b,c) _IOC(_IOC_READ,(a),(b),sizeof(c))
+ #define _IOWR(a,b,c) _IOC(_IOC_READ|_IOC_WRITE,(a),(b),sizeof(c))
++#endif
+ 
+ #define TCGETS		0x5401
+ #define TCSETS		0x5402

@@ -1,0 +1,39 @@
+From: FiberHome HG5582A port <dev@example.invalid>
+Subject: [PATCH] guard ioctl command macros
+
+Packages that include musl's <sys/ioctl.h> and the kernel UAPI
+<linux/ioctl.h> in either order see duplicate definitions of _IOC, _IO,
+_IOR, _IOW and _IOWR.  The two encodings are compatible; keep the first
+definition and skip the duplicate so -Werror builds do not fail.
+
+--- a/include/uapi/asm-generic/ioctl.h
++++ b/include/uapi/asm-generic/ioctl.h
+--- a/include/uapi/asm-generic/ioctl.h
++++ b/include/uapi/asm-generic/ioctl.h
+@@ -66,11 +66,13 @@
+ # define _IOC_READ	2U
+ #endif
+ 
++#ifndef _IOC
+ #define _IOC(dir,type,nr,size) \
+ 	(((dir)  << _IOC_DIRSHIFT) | \
+ 	 ((type) << _IOC_TYPESHIFT) | \
+ 	 ((nr)   << _IOC_NRSHIFT) | \
+ 	 ((size) << _IOC_SIZESHIFT))
++#endif
+ 
+ #ifndef __KERNEL__
+ #define _IOC_TYPECHECK(t) (sizeof(t))
+@@ -82,10 +84,12 @@
+  * NOTE: _IOW means userland is writing and kernel is reading. _IOR
+  * means userland is reading and kernel is writing.
+  */
++#ifndef _IO
+ #define _IO(type,nr)			_IOC(_IOC_NONE,(type),(nr),0)
+ #define _IOR(type,nr,argtype)		_IOC(_IOC_READ,(type),(nr),(_IOC_TYPECHECK(argtype)))
+ #define _IOW(type,nr,argtype)		_IOC(_IOC_WRITE,(type),(nr),(_IOC_TYPECHECK(argtype)))
+ #define _IOWR(type,nr,argtype)		_IOC(_IOC_READ|_IOC_WRITE,(type),(nr),(_IOC_TYPECHECK(argtype)))
++#endif
+ #define _IOR_BAD(type,nr,argtype)	_IOC(_IOC_READ,(type),(nr),sizeof(argtype))
+ #define _IOW_BAD(type,nr,argtype)	_IOC(_IOC_WRITE,(type),(nr),sizeof(argtype))
+ #define _IOWR_BAD(type,nr,argtype)	_IOC(_IOC_READ|_IOC_WRITE,(type),(nr),sizeof(argtype))
