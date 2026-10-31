@@ -1,0 +1,33 @@
+From: FiberHome HG5582A port <dev@example.invalid>
+Date: Sun, 1 Nov 2026 00:00:00 +0800
+Subject: [PATCH] net: airoha: keep VLAN-unaware bridge egress untagged
+
+The PON L2 fallback resolves the bridge egress through the pon0.<vid>
+VLAN upper.  For a VLAN-unaware bridge br_fill_forward_path() leaves the
+ingress VLAN in ctx, so the PPE L2B template would carry the service tag
+and push it back onto the LAN port even though the software bridge sends
+the VLAN upper's untagged frame.
+
+Clear the egress VLAN stack when the bridge does not have VLAN filtering
+enabled.  VLAN-aware bridges keep the stack selected by the FDB path.
+
+Signed-off-by: FiberHome HG5582A port <dev@example.invalid>
+---
+--- a/drivers/net/ethernet/airoha/airoha_ppe.c
++++ b/drivers/net/ethernet/airoha/airoha_ppe.c
+@@ -1444,6 +1444,15 @@
+ 		return false;
+ 	}
+ 
++	/*
++	 * A VLAN-unaware bridge forwards the untagged frame produced by the
++	 * pon0.<vid> VLAN upper.  br_fill_forward_path() leaves the ingress
++	 * VLAN in ctx for such a bridge, but the PPE egress template must not
++	 * push that tag back onto the LAN port.
++	 */
++	if (!br_vlan_enabled(master))
++		ctx.num_vlans = 0;
++
+ 	data.vlan.num = ctx.num_vlans;
+ 	for (i = 0; i < ctx.num_vlans; i++) {
+ 		data.vlan.hdr[i].id = ctx.vlan[i].id;

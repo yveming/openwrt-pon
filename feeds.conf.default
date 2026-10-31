@@ -9,7 +9,6 @@ src-git onu_config https://github.com/naoki66/OpenWrt_ONU_CONFIG.git
 #src-git targets https://github.com/openwrt/targets.git
 #src-git oldpackages http://git.openwrt.org/packages.git
 #src-link custom /usr/src/openwrt/custom-feed
-src-git pon_userspace https://github.com/pbs05/openwrt-pon-userspace.git
 
 # PonWrt 外置包（官方基座没有的包集中在这里）
 src-git pon_feed https://github.com/yveming/openwrt-pon-feed.git

@@ -1,0 +1,152 @@
+From: FiberHome HG5582A port <dev@example.invalid>
+Date: Sun, 1 Nov 2026 00:00:00 +0800
+Subject: [PATCH] net: airoha: resolve PON VLAN upper for PPE L2 bridge offload
+
+PON data frames are received on the physical pon0 netdev while the bridge
+port is pon0.<vid>. The PPE L2 cache-miss fallback currently resolves the
+bridge master from skb->dev, so it never finds the bridge for an IPTV
+service VLAN and the flow stays on the Linux software bridge.
+
+Follow the inline 802.1Q tag to the VLAN upper under RCU before resolving
+the bridge master. This is the same logical ingress device the software
+VLAN and bridge paths use, so the FDB lookup installs the L2B entry with
+the correct egress port and the PPE can forward established IPTV flows.
+
+Signed-off-by: FiberHome HG5582A port <dev@example.invalid>
+---
+--- a/drivers/net/ethernet/airoha/airoha_ppe.c
++++ b/drivers/net/ethernet/airoha/airoha_ppe.c
+@@ -1336,18 +1336,53 @@
+ 	return NULL;
+ }
+ 
++/*
++ * Resolve the logical ingress device used for the bridge FDB lookup.
++ *
++ * airoha_eth delivers PON frames on the physical pon0 netdev, with the
++ * service VLAN still inline in the Ethernet header.  The bridge port is the
++ * pon0.<vid> VLAN upper, so resolving from the physical device alone leaves
++ * the PPE L2 fallback without a bridge master and the flow never leaves the
++ * software path.  Follow the inline tag to the VLAN upper under RCU; the
++ * caller keeps the RCU read lock until dev_fill_forward_path() has resolved
++ * the egress port and taken its reference.
++ */
+ static struct net_device *
+-airoha_ppe_foe_get_bridge_master(struct net_device *dev)
++airoha_ppe_foe_get_bridge_ingress_rcu(struct sk_buff *skb, u16 *vid,
++				      __be16 *proto)
+ {
+-	struct net_device *master;
++	struct ethhdr *eh = eth_hdr(skb);
++	struct vlan_ethhdr *veh;
++	struct net_device *dev = skb->dev;
+ 
+-	rcu_read_lock();
+-	master = airoha_ppe_foe_get_bridge_master_rcu(dev);
+-	if (master)
+-		dev_hold(master);
+-	rcu_read_unlock();
++	*vid = 0;
++	*proto = 0;
++	if (!dev)
++		return NULL;
++
++	if (is_vlan_dev(dev)) {
++		*vid = vlan_dev_vlan_id(dev);
++		*proto = vlan_dev_vlan_proto(dev);
++		return dev;
++	}
++
++	if (skb_vlan_tag_present(skb)) {
++		*vid = skb_vlan_tag_get_id(skb);
++		*proto = skb->vlan_proto;
++		return dev;
++	}
++
++	if (!eth_type_vlan(eh->h_proto) ||
++	    (u8 *)eh + VLAN_ETH_HLEN > skb_tail_pointer(skb))
++		return dev;
++
++	veh = (struct vlan_ethhdr *)eh;
++	*vid = ntohs(veh->h_vlan_TCI) & VLAN_VID_MASK;
++	*proto = veh->h_vlan_proto;
++	if (!*vid)
++		return dev;
+ 
+-	return master;
++	return __vlan_find_dev_deep_rcu(dev, *proto, *vid) ?: dev;
+ }
+ 
+ static bool
+@@ -1358,10 +1393,10 @@
+ 	struct net_device_path_stack stack;
+ 	struct net_device_path_ctx ctx = {};
+ 	struct ethhdr *eh = eth_hdr(skb);
+-	struct vlan_ethhdr *veh;
+ 	struct airoha_flow_data data = {};
+-	struct net_device *master, *egress;
+-	u16 vid, proto;
++	struct net_device *ingress, *master, *egress;
++	u16 vid;
++	__be16 proto;
+ 	int err, i;
+ 
+ 	if (!is_valid_ether_addr(eh->h_source) ||
+@@ -1371,41 +1406,30 @@
+ 	ether_addr_copy(data.eth.h_dest, eh->h_dest);
+ 	ether_addr_copy(data.eth.h_source, eh->h_source);
+ 
+-	if (!skb->dev)
+-		return false;
+-
+ 	/* Resolve the FDB in the packet's VLAN. A trunk port PVID describes
+ 	 * untagged traffic only and must not replace an skb hardware VLAN tag.
+ 	 */
+-	master = airoha_ppe_foe_get_bridge_master(skb->dev);
+-	if (!master)
++	rcu_read_lock();
++	ingress = airoha_ppe_foe_get_bridge_ingress_rcu(skb, &vid, &proto);
++	if (!ingress) {
++		rcu_read_unlock();
++		return false;
++	}
++	master = airoha_ppe_foe_get_bridge_master_rcu(ingress);
++	if (!master) {
++		rcu_read_unlock();
+ 		return false;
++	}
++	dev_hold(master);
+ 
+-	rcu_read_lock();
+ 	ctx.dev = master;
+-	if (is_vlan_dev(skb->dev)) {
+-		vid = vlan_dev_vlan_id(skb->dev);
+-		if (vid) {
+-			ctx.vlan[0].id = vid;
+-			ctx.vlan[0].proto = vlan_dev_vlan_proto(skb->dev);
+-			ctx.num_vlans = 1;
+-		}
+-	} else if (skb_vlan_tag_present(skb)) {
+-		ctx.vlan[0].id = skb_vlan_tag_get_id(skb);
+-		ctx.vlan[0].proto = skb->vlan_proto;
++	if (vid) {
++		ctx.vlan[0].id = vid;
++		ctx.vlan[0].proto = proto;
+ 		ctx.num_vlans = 1;
+-	} else if (eth_type_vlan(eh->h_proto) &&
+-		   (u8 *)eh + VLAN_ETH_HLEN <= skb_tail_pointer(skb)) {
+-		veh = (struct vlan_ethhdr *)eh;
+-		vid = ntohs(veh->h_vlan_TCI) & VLAN_VID_MASK;
+-		if (vid) {
+-			ctx.vlan[0].id = vid;
+-			ctx.vlan[0].proto = veh->h_vlan_proto;
+-			ctx.num_vlans = 1;
+-		}
+ 	} else if (br_vlan_enabled(master) &&
+-		   netif_is_bridge_port(skb->dev) &&
+-		   !br_vlan_get_pvid_rcu(skb->dev, &vid) && vid &&
++		   netif_is_bridge_port(ingress) &&
++		   !br_vlan_get_pvid_rcu(ingress, &vid) && vid &&
+ 		   !br_vlan_get_proto(master, &proto)) {
+ 		ctx.vlan[0].id = vid;
+ 		ctx.vlan[0].proto = htons(proto);
