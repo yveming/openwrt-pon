@@ -228,12 +228,12 @@ ONU 页面也不会拉入 PBX。
 ```text
 bin/targets/airoha/an7581/ponwrt-airoha-an7581-fiberhome_hg5582a-squashfs-sysupgrade.itb
 size:   20 MiB
-sha256: 1cf33282712bc8bfb92717be0b92770b5ac912116a619a74ca1d41335536755f
+sha256: 3ed8bdd9941cac6fd059e9d3d0adfcc2dc8c94c15360946645fa5a10691dbedd
 ```
 
 ```text
 bin/targets/airoha/an7581/ponwrt-airoha-an7581-fiberhome_hg5582a-initramfs-recovery.itb
-size: 17 MiB
+size: 18 MiB
 ```
 
 镜像 manifest 关键包：
@@ -382,14 +382,19 @@ VLAN 和组播 VLAN。上一版把 `vlan_map` 放在 `airoha_eth` 里直接改 s
   仍可重新自适应；
 - `auto_wait_registered()` 每秒检查一次 `ponctl status`，注册成功立即
   接受，不再固定等满 `auto_timeout`；
+- `auto_phy_timeout`：候选启动后，PCS FreqDet 在该时间内未锁定就提前
+  判失败并切换下一个候选；设为 0 则关闭提前失败，仍等满 `auto_timeout`；
+- 候选失败日志会附带 `pcs signal/freqdet/level/target`，对应原厂
+  `freq_check()` 的 RX clock/FreqDet 位，便于刷机后台架判断；
 - 候选列表不再在代码里写死 10G；`auto_modes` 可以包含 `gpon`、
   `epon-1g`，由 `ponctl mode set` 和 board/frontend 能力决定是否可用。
   HG5582A 默认仍只列 10G 候选。
 
-驱动侧暂未增加原厂的 PON PHY 事件 ABI，验收信号仍是
-`ponctl status`（`service_ready` / `operational` / O5 / MPCP registered）。
-持久化、重启点、尝试上限已按原厂结构对齐；以后可以把
-`auto_registered()` 替换成驱动事件，状态机不变。
+驱动侧暂未增加原厂的 PON PHY 事件 ABI；用户态直接消费现有的
+`pcs_signal_detected` / `pcs_freqdet_locked` / `pcs_frequency_level` /
+`pcs_frequency_target`，不修改内核。最终验收仍是
+`ponctl status`（`service_ready` / `operational` / O5 / MPCP registered），
+FreqDet 只用于提前淘汰明显不锁频的候选。
 
 UI 增加：
 
