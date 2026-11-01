@@ -1,0 +1,90 @@
+From: FiberHome HG5582A port <dev@example.invalid>
+Date: Sun, 1 Nov 2026 00:00:00 +0800
+Subject: [PATCH] net: airoha: hand PON service VLANs to the logical service netdev
+
+The vendor ponvlan layer exposes a logical service interface such as
+veip0.43 that carries untagged frames.  Add a link-op callback so the
+PON driver can offer tagged data frames to that layer before the normal
+VLAN upper path.  The callback takes skb ownership when it consumes the
+frame; otherwise the existing bridge/VLAN path is unchanged.
+
+Signed-off-by: FiberHome HG5582A port <dev@example.invalid>
+---
+--- a/include/linux/airoha-eth.h
++++ b/include/linux/airoha-eth.h
+@@ -91,6 +91,8 @@
+ 	/* rx_control() takes skb ownership before returning to airoha_eth. */
+ 	void (*rx_control)(void *priv, struct sk_buff *skb,
+ 			   const struct airoha_pon_ctrl_rx_info *info);
++	/* rx_service() takes skb ownership when it returns true. */
++	bool (*rx_service)(void *priv, struct sk_buff *skb, u16 vid);
+ 	/* Wake protocol control netdevs when the shared QDMA ring recovers. */
+ 	void (*wake_control_tx)(void *priv);
+ };
+--- a/drivers/net/ethernet/airoha/airoha_eth.c
++++ b/drivers/net/ethernet/airoha/airoha_eth.c
+@@ -986,6 +986,41 @@
+ }
+ 
+ /*
++ * Give the PON service layer first refusal on tagged data frames.  The layer
++ * owns the mapping from operator VLAN IDs to a logical service netdev; it
++ * strips the tag and delivers the frame itself when the VID matches.
++ */
++static bool airoha_pon_try_service_rx(struct airoha_gdm_dev *dev,
++				      struct sk_buff *skb)
++{
++	const struct airoha_pon_link_ops *ops;
++	void *priv;
++	u16 vid;
++	bool ret = false;
++
++	if (skb_vlan_tag_present(skb)) {
++		vid = skb_vlan_tag_get_id(skb);
++	} else if (eth_type_vlan(skb->protocol) &&
++		   skb_mac_header_was_set(skb)) {
++		struct vlan_ethhdr *veh =
++			(struct vlan_ethhdr *)skb_mac_header(skb);
++
++		vid = ntohs(veh->h_vlan_TCI) & VLAN_VID_MASK;
++	} else {
++		return false;
++	}
++
++	rcu_read_lock();
++	ops = READ_ONCE(dev->pon_link_ops);
++	priv = READ_ONCE(dev->pon_link_priv);
++	if (ops && ops->rx_service)
++		ret = ops->rx_service(priv, skb, vid);
++	rcu_read_unlock();
++
++	return ret;
++}
++
++/*
+  * Rewrite the inline service VLAN before eth_type_trans() hands the frame to
+  * the VLAN upper.  This is the small, downstream-only subset of the vendor
+  * ponvlan rule engine needed to keep an operator multicast VLAN (for
+@@ -1167,8 +1202,21 @@
+ 		 * the original ingress VLAN, while the software template carries
+ 		 * the translated egress VLAN.
+ 		 */
+-		if (test_bit(AIROHA_DEV_F_PON, &dev->flags))
++		if (test_bit(AIROHA_DEV_F_PON, &dev->flags)) {
++			if (airoha_pon_try_service_rx(dev, q->skb)) {
++				u8 channel =
++					FIELD_GET(QDMA_ETH_RXMSG_CHANNEL_MASK,
++						  msg0);
++
++				atomic64_inc(&dev->pon_stats.rx_data_packets);
++				atomic64_inc(&dev->pon_stats.rx_packets_delivered);
++				atomic64_inc(&dev->pon_stats.rx_channel_packets[channel]);
++				q->skb = NULL;
++				done++;
++				continue;
++			}
+ 			airoha_pon_vlan_translate_rx(dev, q->skb);
++		}
+ 
+ 		if (netdev_uses_dsa(netdev)) {
+ 			struct airoha_gdm_port *port = dev->port;

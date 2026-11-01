@@ -299,3 +299,42 @@ c649e87 nf-nethelper-rtsp: add standalone RTSP conntrack/NAT helper
 
 `feeds/onu_config` 没有独立 git 仓库，使用
 `/home/ming/HG5582A/work/patches/onu_config-local.patch` 保存文本改动。
+
+---
+
+## 11. IPTV 逻辑业务接口（相对上一版）
+
+原厂 `veip0.43` 在 Linux 侧是 untagged，`ponvlan` 在 `pon0` 前加/剥业务
+VLAN 和组播 VLAN。上一版把 `vlan_map` 放在 `airoha_eth` 里直接改 skb tag，
+层次不对；这一版改成由 `airoha-xpon` 创建逻辑业务 netdev：
+
+- 新增 `feeds/pon_drivers/airoha-xpon/src/airoha-xpon-service.c/.h`。
+- 逻辑设备由 `/sys/class/net/<pon>/xpon/service` 配置：
+  `"<name> <service_vlan> <multicast_vlan>"`，`clear` 删除。
+- TX：逻辑设备上的帧保持 untagged；单播/广播打 `service_vlan`，
+  IPv4/IPv6 组播打 `multicast_vlan`，然后交给 `pon0`。
+- RX：`pon0` 收到 `service_vlan` 或 `multicast_vlan`，剥掉 tag 后投递到
+  逻辑设备；其他 VLAN 继续走原来的 VLAN upper。
+- `airoha_eth` 只新增 `rx_service` 回调，在 `eth_type_trans()` 之后、
+  `vlan_map` 之前把业务帧交给 `airoha-xpon`；GEM/QDMA/PLOAM/OMCI 未改。
+- `vlan_map` 保留但由 IPTV 应用写 `clear`，不再用于 IPTV。
+- service VLAN / multicast VLAN / 逻辑设备名 / L3 接口名全部是用户配置，
+  没有内置默认值。multicast VLAN 留空表示组播走 service VLAN。
+- bridge 模式：逻辑设备加入 `br-lan`；dnsmasq 按原厂三种前缀
+  `SCI` / `sci` / `00 00 1f` 不回答 STB 的 DHCP。
+- route 模式：在逻辑设备上创建用户命名的普通 L3 接口（DHCP/static）。
+  DHCP Option 60 属于该接口的 DHCP 配置，IPTV 应用不写。
+- IGMP snooping、IGMP proxy、防火墙、NAT、策略路由都不再由 IPTV 应用写。
+- 删除 `iptv-oem` / `iptv-apply`，统一为 `/usr/libexec/iptv`；
+  `/etc/init.d/iptv` 直接调用它。
+- 新增 `target/linux/airoha/patches-6.18/9997-net-airoha-add-pon-service-rx-hook.patch`。
+- `luci-app-onu` 的 IPTV 页面只保留 mode、service/multicast VLAN、逻辑设备名、
+  L3 接口名、proto/地址；旧的 port/trunk、IGMP/MLD、relay、vlan_map 字段删除。
+
+已知限制：
+
+- 逻辑业务接口的帧通过 `netif_receive_skb()` 交付，未接入 PPE L2B；
+  IPTV 单播和组播都走 CPU 路径。PPE 组播 port-mask 也未实现。
+- 逻辑设备是自定义 netdev，不是 802.1Q VLAN upper；`ip -d link` 不会显示
+  VLAN 信息，VLAN 由 `pon0` 前的 service 层处理。
+- 需要在真机上验证 STB 盲插、DHCP Option 60 归属、43/3990 收发和 route 模式。
