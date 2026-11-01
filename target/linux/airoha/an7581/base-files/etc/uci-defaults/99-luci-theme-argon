@@ -1,0 +1,15 @@
+#!/bin/sh
+# SPDX-License-Identifier: Apache-2.0
+#
+# Make Argon the initial LuCI theme when the theme package is present.
+# The script is removed after the first successful boot, so a later theme
+# selection in LuCI is not overwritten.
+
+[ -d /www/luci-static/argon ] || exit 0
+
+current="$(uci -q get luci.main.mediaurlbase)"
+[ "$current" = '/luci-static/argon' ] && exit 0
+
+uci set luci.main.mediaurlbase='/luci-static/argon'
+uci commit luci
+exit 0
