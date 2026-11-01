@@ -338,3 +338,52 @@ VLAN 和组播 VLAN。上一版把 `vlan_map` 放在 `airoha_eth` 里直接改 s
 - 逻辑设备是自定义 netdev，不是 802.1Q VLAN upper；`ip -d link` 不会显示
   VLAN 信息，VLAN 由 `pon0` 前的 service 层处理。
 - 需要在真机上验证 STB 盲插、DHCP Option 60 归属、43/3990 收发和 route 模式。
+
+---
+
+## 12. PON 自适应按原厂持久化状态机重写
+
+原厂自动模式不是用户态无限轮询，而是：
+
+```text
+驱动/PHY 检测 -> 上报事件 -> 用户态写持久化 pon_mode -> 重启
+```
+
+并且只在 mix BOSA（BOSA mode 6）上启用，受 `/var/noapt` 和
+`apt_status.times` 限制。
+
+本次把 `pon.init` 的自动模式改成同形状的持久化状态机：
+
+- `auto_selected`：最近一次成功注册的模式，下一次启动优先尝试；
+- `auto_state`：当前正在尝试的候选；
+- `auto_attempts`：失败次数；
+- `auto_max_attempts`：达到上限后关闭 auto，并把第一个候选写成固定
+  `mode`，对应原厂的 `/var/noapt` 保护；
+- `auto_reboot=1`：失败后把下一个候选写入 UCI 并重启，对应原厂的
+  `fhad_ponmode_change_proc()`；
+- `auto_reboot=0`：仅用于台架测试，按 `auto_retry` 间隔在当前启动内切换；
+- 成功注册后不再重启，记录 `auto_selected`，保持 `mode=auto` 以便下次
+  仍可重新自适应；
+- `auto_wait_registered()` 每秒检查一次 `ponctl status`，注册成功立即
+  接受，不再固定等满 `auto_timeout`；
+- 候选列表不再在代码里写死 10G；`auto_modes` 可以包含 `gpon`、
+  `epon-1g`，由 `ponctl mode set` 和 board/frontend 能力决定是否可用。
+  HG5582A 默认仍只列 10G 候选。
+
+驱动侧暂未增加原厂的 PON PHY 事件 ABI，验收信号仍是
+`ponctl status`（`service_ready` / `operational` / O5 / MPCP registered）。
+持久化、重启点、尝试上限已按原厂结构对齐；以后可以把
+`auto_registered()` 替换成驱动事件，状态机不变。
+
+UI 增加：
+
+- `auto_max_attempts`
+- `auto_reboot`
+- 只读的 `Last selected mode`（`auto_selected`）
+- `auto_modes` 校验允许 `gpon` / `epon-1g`，但当前板默认不列。
+
+已知边界：
+
+- GPON / 1G-EPON 的 MAC/frontend 支持仍是以后其他设备的工作；
+  当前 HG5582A 的 board profile 只启用 10G；
+- IPTV PPE 组播 offload 仍未实现，继续走 Linux bridge/omcproxy 软件路径。
