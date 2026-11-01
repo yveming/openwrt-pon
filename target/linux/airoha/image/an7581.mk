@@ -273,8 +273,8 @@ endef
 TARGET_DEVICES += fiberhome_hg5382a
 
 # HG5582A is the single-FXS, WiFi/USB-less variant of the HG5382A family.
-# The Le9642 voice stack is added by the voice package when it becomes
-# available; the base image only carries PON/LAN and the factory data.
+# The device profile selects the Le9642/Asterisk stack; luci-app-onu itself
+# does not depend on a PBX, so boards without an FXS port can reuse it.
 define Device/fiberhome_hg5582a
   $(call Device/FitImageLzma)
   DEVICE_VENDOR := FiberHome
@@ -298,6 +298,9 @@ define Device/fiberhome_hg5582a
     luci-app-onu luci-app-pon-status luci-app-omcproxy luci-theme-argon \
     kmod-nf-nethelper-rtsp kmod-nf-nathelper-fcc \
     kmod-airoha-en7581-pcm-spi asterisk-chan-en75xx \
+    asterisk-pjsip asterisk-res-rtp-asterisk \
+    asterisk-codec-ulaw asterisk-codec-alaw asterisk-codec-g722 \
+    asterisk-bridge-simple megaco-sip-gateway \
     fitblk nand-utils ubi-utils
 endef
 TARGET_DEVICES += fiberhome_hg5582a

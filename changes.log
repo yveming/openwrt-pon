@@ -105,7 +105,7 @@
 
 ### 3.3 LuCI / 后端
 
-`feeds/onu_config/luci-app-onu`：
+`feeds/onu_config/luci-app-onu`（voice 页面仍随本包提供）：
 
 - Voice 页支持 SIP、IMS SIP、H.248 三选一；
 - H.248 只暴露 text/ABNF；
@@ -116,6 +116,11 @@
 - 语音承载支持 route / bridge / trunk；
 - `voice-apply` 负责 VLAN/网桥/firewall zone；
 - `voice-signal` 生成 Asterisk/PJSIP 或 H.248 gateway 配置。
+
+`luci-app-onu` 仍安装 voice 页面、`onu-voice`、`voice` init、
+`voice-apply` 和 `voice-signal`，与 naoki66 原版布局一致；但不再依赖
+Asterisk/Megaco。带 FXS 的设备包负责选择电话栈，没有 FXS 的板子只装
+ONU 页面也不会拉入 PBX。
 
 ---
 
@@ -185,6 +190,8 @@
 `luci-app-onu`：
 
 - 页面：PON 状态、硬件身份、认证配置、Internet、IPTV、Voice；
+- Voice 页面仍随本包提供，但 Asterisk/Megaco 由带 FXS 的设备包选择，
+  不是本包的硬依赖；
 - IPTV 页改为 `lan-bridge` / `route` 两模式；
 - 只暴露一个 IPTV service VLAN、可选 multicast VLAN；
 - 移除 `iptv_mc` / `veip0` 相关表达；
@@ -221,7 +228,7 @@
 ```text
 bin/targets/airoha/an7581/ponwrt-airoha-an7581-fiberhome_hg5582a-squashfs-sysupgrade.itb
 size:   20 MiB
-sha256: 22bd7d2a6c8d0cdbe13ab9bc391289a5346787fe66dd854d960832624a8b51e8
+sha256: 1cf33282712bc8bfb92717be0b92770b5ac912116a619a74ca1d41335536755f
 ```
 
 ```text
@@ -232,10 +239,11 @@ size: 17 MiB
 镜像 manifest 关键包：
 
 ```text
-airoha-ponctl 0.2.0-r1
+airoha-ponctl 0.2.0-r2
 airoha-pond 0.3.0-r2
-kmod-airoha-xpon 6.18.55-r68
-luci-app-onu 0.1.0-r30
+kmod-airoha-xpon 6.18.55-r70
+luci-app-onu 0.1.0-r33
+luci-app-pon-status 0.1.0-r13
 luci-app-omcproxy 0.1.0-r1
 luci-theme-argon 2.4.7-r20260824
 kmod-nf-nethelper-rtsp 6.18.55.1.0.0-r1
@@ -249,10 +257,10 @@ kmod-airoha-en7581-pcm-spi 6.18.55.2026.09.24~4222576d-r28
 
 ## 8. 变更规模
 
-- 顶层 OpenWrt：16 个受跟踪文件，约 +989 / -8（不含本 `changes.log`；它本身是新增的第 17 个文件）。
-- `feeds/pon_drivers`：1 个文件，+88。
+- 顶层 OpenWrt：17 个受跟踪文件，约 +1082 / -8（不含本 `changes.log`；它本身是新增的第 18 个文件）。
+- `feeds/pon_drivers`：9 个文件，约 +501 / -3。
 - `feeds/pon_feed`：13 个文件（含新增 RTSP 包、H.248 包、Le9642 u-law patch）。
-- `feeds/onu_config`：37 个文件（相对 `/home/ming/openwrt-pon/feeds/onu_config`）。
+- `feeds/onu_config`：41 个文件（相对 `/home/ming/openwrt-pon/feeds/onu_config`，含 2 个预编译二进制）。
 
 ---
 
@@ -272,21 +280,29 @@ kmod-airoha-en7581-pcm-spi 6.18.55.2026.09.24~4222576d-r28
 
 ## 10. 提交参考
 
-顶层：
+顶层（本次清理提交之前）：
 
 ```text
-7ae37b6042 airoha: add FiberHome HG5582A PON, voice and OEM IPTV data path
-a63074b320 toolchain/musl: parenthesize bswap helpers for -Werror
-afa752744f toolchain: guard duplicate ioctl command macros
-d84bec3e7d toolchain/musl: fix CMSG_NXTHDR sign comparison
-64df529e55 toolchain: guard socket and interface macros
-c0bf9c896b airoha: enable RTSP/FCC helpers, omcproxy UI and Argon theme
+7360b1f4be airoha-xpon: expose PCS auto-mode diagnostics
+72919aa65b pon: align auto mode with the OEM persistent state machine
+aad93dfb69 airoha: add logical PON service interface for IPTV
+add88eab5c docs: record HG5582A changes against the openwrt-pon baseline
 c99a347c3c airoha: default to Argon when the theme is installed
+c0bf9c896b airoha: enable RTSP/FCC helpers, omcproxy UI and Argon theme
+64df529e55 toolchain: guard socket and interface macros
+d84bec3e7d toolchain/musl: fix CMSG_NXTHDR sign comparison
+afa752744f toolchain: guard duplicate ioctl command macros
+a63074b320 toolchain/musl: parenthesize bswap helpers for -Werror
+7ae37b6042 airoha: add FiberHome HG5582A PON, voice and OEM IPTV data path
 ```
+
+本次清理把 voice 依赖修正和 HG5582A multi-profile 配置修正合并成一个提交。
 
 `feeds/pon_drivers`：
 
 ```text
+783e645 airoha-xpon: expose PCS auto-mode diagnostics
+8397135 airoha-xpon: add logical PON service interface
 a877ab6 airoha-xpon: expose PON service VLAN translation
 ```
 
@@ -393,3 +409,111 @@ UI 增加：
 `pcs_frequency_level` / `pcs_frequency_target`，用于台架判断 AN7581
 PCS 能否在 XG-PON / XGS-PON / 10G-EPON 之间给出可区分的频率/模式信息。
 这是移植 `phy_10g.ko` 的 `freq_check()` 和 LDDLA auto mode 之前的测量入口。
+
+---
+
+## 13. LuCI 与 voice 的解耦方式（不拆包）
+
+`luci-app-onu` 升到 `0.1.0-r33`。
+
+问题不是 voice 页面放在哪个包，而是 `LUCI_DEPENDS` 里塞进了
+`asterisk-chan-en75xx`、`asterisk-pjsip`、`asterisk-res-rtp-asterisk`、
+G.711/G.722 codec、`asterisk-bridge-simple`、`megaco-sip-gateway`，
+导致装一个 ONU 页面就强制拉入整套 PBX。naoki66 原版没有这种依赖。
+
+最终保持 naoki66 的单包布局：
+
+- voice 页面、`onu-voice` 配置、`voice` init、`voice-apply`、
+  `voice-signal` 仍在 `luci-app-onu` 内；
+- `admin/onu/voice` 菜单和 `onu-voice` 的 ACL 读写权限仍在
+  `luci-app-onu` 内；
+- `LUCI_DEPENDS` 只保留 PON、Internet、IPTV 和状态页面需要的包，
+  不再包含任何 Asterisk/Megaco 包；
+- HG5582A 设备包 `Device/fiberhome_hg5582a` 负责选择电话栈：
+  `asterisk-chan-en75xx`、`asterisk-pjsip`、`asterisk-res-rtp-asterisk`、
+  G.711/G.722 codec、`asterisk-bridge-simple`、`megaco-sip-gateway`；
+  `asterisk-chan-en75xx` 自己还会拉入 Asterisk core、playtones/record、
+  wav、musiconhold 和 sounds；
+- Nokia XG-040G-MD 设备包不选这些包，所以它的镜像有 ONU 页面但没有 PBX。
+  这和 naoki66 原版的行为一致：没有装电话栈时 Voice 页仍在，但不会工作。
+
+没有采用独立的 `luci-app-onu-voice`：那会偏离上游布局，也会让
+`luci-app-onu` 的菜单/ACL 需要跨包拼接。真正需要的是去掉硬依赖，
+不是拆包。
+
+跨页端口互斥仍保留：Internet 页会读 `onu-voice` 判断专用口/trunk 口，
+但该配置由本包自带，不构成对 Asterisk 的依赖。
+
+---
+
+## 14. Nokia XG-040G-MD 测试固件
+
+同平台对照机：AN7581 / EN7581，PON 前端是 EN7572（不是 HG5582A 的
+paged BOSA + maxlinear），以太网 PHY 是 EN8811H，没有 FXS。
+
+已构建标准 UBI 测试镜像（含 `luci-app-onu 0.1.0-r33`，不选 Asterisk/Megaco）：
+
+```text
+/home/ming/HG5582A/work/images/xg-040g-md-ubi/
+  ponwrt-airoha-an7581-nokia_xg-040g-md-ubi-squashfs-sysupgrade.itb
+  sha256: fe7f9424cee85461502bb1ec6c9bd86efa32b308b2f5968de0fc9bb86d30e032
+  ponwrt-airoha-an7581-nokia_xg-040g-md-ubi-initramfs-recovery.itb
+  sha256: 515e0e4485738caf5a9c7311b9f91860a07371686fd8741ec4fbfcb55af60c3b
+```
+
+镜像内已确认包含 `kmod-phy-airoha-en8811h`、`kmod-nf-nethelper-rtsp`、
+`kmod-nf-nathelper-fcc`、`luci-app-omcproxy`、`luci-theme-argon`，
+以及 `kmod-airoha-en7572` 对应的 `kmod-airoha-pon-frontend`。交付的
+manifest 从该镜像的 per-device rootfs 生成，共 215 个包。
+
+USB-SFP UBI 变体不在本次范围，不再构建。
+
+这个镜像未在 XG-040G-MD 上验证，只是用于验证用户态 PON 自适应状态机、
+`ponctl status --json` 的 PCS 诊断字段和 10G 候选注册。EN7572 前端的
+寄存器/光校准路径与 HG5582A 的 `phy_10g.ko` 不同，不能用来推断
+HG5582A 的 LDDLA/freq_check 行为。
+
+---
+
+## 15. HG5582A 单 profile 配置误加与修正
+
+`7ae37b6042` 加 HG5582A 时，除了正确的 multi-profile 开关，还往
+`configs/an7581.config` 里加了：
+
+```text
+CONFIG_TARGET_airoha_an7581_DEVICE_fiberhome_hg5582a=y
+```
+
+但基线只有：
+
+```text
+CONFIG_TARGET_MULTI_PROFILE=y
+CONFIG_TARGET_DEVICE_airoha_an7581_DEVICE_fiberhome_hg5582a=y
+```
+
+`CONFIG_TARGET_airoha_an7581_DEVICE_*` 是单 profile 的 Target Profile
+choice，`CONFIG_TARGET_MULTI_PROFILE` 是同一个 choice 的另一个选项。
+`make defconfig` 会选前者并把 multi-profile 关掉，`Target Devices` 段
+随之消失，`TARGET_PER_DEVICE_ROOTFS` 失效。结果是设备包只编译、不安装：
+`kmod-phy-airoha-en8811h=m` 不会进全局 rootfs，单设备镜像里确实没有
+`air_en8811h.ko`，2.5G 口也就起不来。
+
+修正：
+
+- 删除误加的 `CONFIG_TARGET_airoha_an7581_DEVICE_fiberhome_hg5582a=y`；
+- 保留 `CONFIG_TARGET_MULTI_PROFILE=y`、
+  `CONFIG_TARGET_PER_DEVICE_ROOTFS=y`；
+- 只保留 multi-profile 的设备开关
+  `CONFIG_TARGET_DEVICE_airoha_an7581_DEVICE_fiberhome_hg5582a=y`；
+- `CONFIG_PACKAGE_kmod-phy-airoha-en8811h` 保持 `m`，由 per-device
+  rootfs 安装进目标镜像；
+- 不修改 `include/image.mk`，manifest 行为保持上游。
+
+单设备构建的正确方式：
+
+```text
+保留 CONFIG_TARGET_MULTI_PROFILE=y
+保留 CONFIG_TARGET_PER_DEVICE_ROOTFS=y
+只把目标设备的 CONFIG_TARGET_DEVICE_...=y 打开，其他设备关掉
+不要设置 CONFIG_TARGET_airoha_an7581_DEVICE_*（那是单 profile 的 choice）
+```
