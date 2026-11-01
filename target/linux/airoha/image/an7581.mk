@@ -295,7 +295,8 @@ define Device/fiberhome_hg5582a
 	append-metadata
   DEVICE_PACKAGES := kmod-gpio-button-hotplug kmod-leds-gpio kmod-phy-maxlinear \
     kmod-airoha-paged-bosa kmod-airoha-xpon airoha-ponctl airoha-pond \
-    luci-app-onu luci-app-pon-status \
+    luci-app-onu luci-app-pon-status luci-app-omcproxy luci-theme-argon \
+    kmod-nf-nethelper-rtsp kmod-nf-nathelper-fcc \
     kmod-airoha-en7581-pcm-spi asterisk-chan-en75xx \
     fitblk nand-utils ubi-utils
 endef
