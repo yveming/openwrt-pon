@@ -387,3 +387,9 @@ UI 增加：
 - GPON / 1G-EPON 的 MAC/frontend 支持仍是以后其他设备的工作；
   当前 HG5582A 的 board profile 只启用 10G；
 - IPTV PPE 组播 offload 仍未实现，继续走 Linux bridge/omcproxy 软件路径。
+
+补充：`ponctl status --json` 的 line 组新增
+`pcs_signal_detected` / `pcs_rx_mode_raw` / `pcs_freqdet_locked` /
+`pcs_frequency_level` / `pcs_frequency_target`，用于台架判断 AN7581
+PCS 能否在 XG-PON / XGS-PON / 10G-EPON 之间给出可区分的频率/模式信息。
+这是移植 `phy_10g.ko` 的 `freq_check()` 和 LDDLA auto mode 之前的测量入口。
