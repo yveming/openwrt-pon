@@ -1,0 +1,301 @@
+# HG5582A OpenWrt 移植 changes.log
+
+基线（2026-11-01）：
+
+- 顶层 OpenWrt：`openwrt-pon` 的 `9c3bc724ab`（`build: restore ponwrt- image prefix`）
+- `feeds/pon_drivers`：`04adfaf`（`origin/main`）
+- `feeds/pon_feed`：`b4b7672`（`origin/main`）
+- `feeds/onu_config`：`/home/ming/openwrt-pon/feeds/onu_config` 的目录状态
+- 工作树：`/home/ming/HG5582A/work/openwrt-pon-hg5582a`，分支 `hg5582a-work`
+
+本文只列“相对基线”的改动，不重复 upstream 已有内容。
+
+---
+
+## 1. 目标 / 板级支持
+
+新增：
+
+- `target/linux/airoha/dts/an7581-fiberhome-hg5582a.dts`
+  - FiberHome HG5582A：AN7581 / EN7581，512 MiB DRAM，并行 NAND；
+  - LAN1 走 GDM4 + GPY211（2.5G），LAN2-LAN4 走内部 MT7530 兼容交换；
+  - PON：GDM2 + `xpon_mac`，BOSA 在 I2C `0x51`，`fiberhome,hg5x-bosa`；
+  - 单 FXS：`pcm0` + `zsi0` + `le9642`，`airoha,u-law`，`pcm_spi_pins`；
+  - LED / reset / UBI / factory 数据布局。
+
+修改：
+
+- `target/linux/airoha/image/an7581.mk`
+  - 新增 `Device/fiberhome_hg5582a`；
+  - FIT `sysupgrade.itb` + `initramfs-recovery.itb`；
+  - 设备包：PON、LuCI、voice、IPTV、RTSP/FCC、omcproxy、Argon。
+- `target/linux/airoha/an7581/base-files/etc/board.d/02_network`
+  - HG5582A 加入 `lan1 lan2 lan3 lan4` / `pon0` 映射。
+- `target/linux/airoha/base-files/etc/board.d/03_pon_data`
+  - HG5582A factory UBI 目标 1 MiB。
+- `target/linux/airoha/an7581/base-files/lib/upgrade/platform.sh`
+  - HG5582A 加入 sysupgrade 平台匹配。
+- `configs/an7581.config`
+  - 选中 HG5582A；
+  - `CONFIG_TARGET_OPTIMIZATION` 增加 `-DHAVE_PJSIP_AUTH_NEW_DIGESTS`；
+  - 选中 `luci-app-onu` / `luci-app-pon-status` / Asterisk / `megaco-sip-gateway` /
+    `kmod-nf-nethelper-rtsp` / `kmod-nf-nathelper-fcc` / `luci-app-omcproxy` /
+    `luci-theme-argon`。
+- `feeds.conf.default`
+  - 移除 `src-git pon_userspace`，PON 管理统一走 `OpenWrt_ONU_CONFIG`。
+
+---
+
+## 2. PON 管理
+
+### 2.1 自动模式
+
+`feeds/onu_config/airoha-ponctl`：
+
+- `pon.init` 增加 auto 状态机：
+  - 候选顺序 `xgpon epon-10g-1g xgspon epon-10g-10g`；
+  - 每个模式有注册超时；
+  - 失败后按 `auto_retry` 重试；
+  - 只支持 10G 模式（XG-PON / XGS-PON / 10G-EPON）。
+- `pon.config` 增加 `auto_modes`、`auto_timeout`、`auto_retry`。
+- `ponctl` 源码保留，镜像使用预编译静态 aarch64 二进制，避免构建 Rust 工具链。
+
+### 2.2 OMCI / OAM 选择
+
+`feeds/onu_config/airoha-pon-daemons`：
+
+- `airoha-pond.init` 根据当前 PON 模式选择 OMCI 或 EPON OAM；
+- 源码中调整 `runtime`、`agent`、`omci`、`oam` 配置和 MIB；
+- 镜像同样使用预编译静态二进制。
+
+### 2.3 PON 服务 VLAN 翻译
+
+`feeds/pon_drivers/airoha-xpon`：
+
+- 新增 `/sys/class/net/ponX/xpon/vlan_map`；
+- 调用 `airoha_eth_pon_set_vlan_map()` / `get()`；
+- 把运营商内部组播 VLAN（如 3990）折叠到唯一暴露的业务 VLAN（如 43）；
+- `pon0.3990` / `iptv_mc` 不再需要。
+
+---
+
+## 3. Voice
+
+### 3.1 设备树 / 驱动
+
+- DTS 增加 `pcm0`、`zsi0`、`slic0`（Le9642）、`airoha,u-law`、`pcm_spi_pins`。
+- `feeds/pon_feed/kernel/airoha-voice`：
+  - 新增 `en75xx-zsi.ko`、`en75xx-slic-le9642.ko`；
+  - 新增 `012-le9642-u-law.dts.patch`：支持 `airoha,u-law`；
+  - 依赖从 XG2010G 放宽到所有 `TARGET_airoha_an7581`；
+  - 自动加载列表加入 ZSI / Le9642；
+  - `airoha-voice-ctl.c` 修复 musl 与内核 UAPI 的 ioctl 宏冲突。
+
+### 3.2 SIP / H.248
+
+- Asterisk 23.2.2 + PJSIP：
+  - `asterisk-chan-en75xx` 连接本地 FXS；
+  - `-DHAVE_PJSIP_AUTH_NEW_DIGESTS` 解决 pjproject 头文件冲突；
+  - 启用 `res-rtp-asterisk`、G.711/G.722、`app-playtones`、`app-record`、
+    `format-wav`、`res-musiconhold`、sounds。
+- `feeds/pon_feed/net/megaco-sip-gateway`：
+  - H.248/Megaco 到 SIP 的媒体网关；
+  - 当前只支持 H.248 text/ABNF over UDP；
+  - 预编译静态 aarch64 `h248-gateway`，含 init 和 uci-defaults。
+
+### 3.3 LuCI / 后端
+
+`feeds/onu_config/luci-app-onu`：
+
+- Voice 页支持 SIP、IMS SIP、H.248 三选一；
+- H.248 只暴露 text/ABNF；
+- 单 FXS、编码优先级、DTMF、数图、增益、回音消除；
+- 默认语音协议改为 **IMS SIP**，默认 DTMF 改为 **RFC2833**
+  （`onu-voice.config.protocol='ims_sip'`、
+  `onu-voice.config.dtmf_method='RFC2833'`，LuCI 默认值同步）；
+- 语音承载支持 route / bridge / trunk；
+- `voice-apply` 负责 VLAN/网桥/firewall zone；
+- `voice-signal` 生成 Asterisk/PJSIP 或 H.248 gateway 配置。
+
+---
+
+## 4. Internet / IPTV / 防火墙
+
+### 4.1 Internet
+
+`luci-app-onu/root/usr/libexec/internet-apply`：
+
+- 支持 bridge / DHCP / PPPoE；
+- VLAN / UNTAG 透明模式；
+- `ct-wanup` / `br-wanup` 拓扑；
+- nftables 过滤；
+- LAN 口归属检查，避免和 IPTV / voice 抢端口。
+
+### 4.2 IPTV OEM 数据面
+
+`luci-app-onu/root/usr/libexec/iptv-oem`：
+
+- `lan-bridge`：
+  - `pon0.43` 加入 `br-lan`；
+  - STB 可盲插任意 LAN 口；
+  - 不再创建 `br-iptv` / `iptv_mc`。
+- `route`：
+  - `pon0.43` 作为唯一的 `iptv` 三层 WAN；
+  - DHCP / static；
+  - `omcproxy` 上游 `iptv`，下游 `lan`；
+  - `defroute=0`，metric 2000。
+- `multicast_vlan`：
+  - 不创建 Linux 接口；
+  - 写 `/sys/class/net/ponX/xpon/vlan_map`，例如 `3990:43`。
+- `iptv-ppe`：
+  - 显示 PON VLAN map、bridge/MDB/FDB、`/sys/kernel/debug/ppe/bind` 的 L2B 条目。
+
+### 4.3 内核 / PPE
+
+新增补丁：
+
+- `9994-net-airoha-resolve-pon-vlan-bridge-port.patch`
+  - PON RX 的 `skb->dev` 是 `pon0`，bridge port 是 `pon0.<vid>`；
+  - 按内联 VLAN tag 找 VLAN upper，再解析 bridge master/FDB；
+  - 已建立的单播 L2 流写入 PPE L2B。
+- `9995-net-airoha-add-pon-vlan-translation.patch`
+  - 每 PON 设备的 `pon_vlan_map`；
+  - RX 路径改写内联 802.1Q VID（例如 3990 -> 43）；
+  - RCU 保护，softirq 无锁读取。
+- `9996-net-airoha-keep-vlan-unaware-bridge-egress-untagged.patch`
+  - VLAN-unaware `br-lan` 的 egress 模板不再把 ingress VLAN 推回 LAN 口。
+
+### 4.4 RTSP / FCC / omcproxy / 主题
+
+- `feeds/pon_feed/kernel/nf-nethelper-rtsp`
+  - 从 xtables-addons 的 RTSP helper 抽成独立包；
+  - 只编译 `nf_conntrack_rtsp.ko` / `nf_nat_rtsp.ko`，不引入 iptables/xtables 全套。
+- `feeds/pon_feed/kernel/nf-nathelper-fcc`
+  - FCC conntrack/NAT helper；
+  - fw4 helper 使用 UDP 8027。
+- `luci-app-omcproxy` 选入镜像。
+- `luci-theme-argon` 选入镜像；
+  - 新增 `target/linux/airoha/an7581/base-files/etc/uci-defaults/99-luci-theme-argon`；
+  - 首次启动把 `luci.main.mediaurlbase` 设为 `/luci-static/argon`。
+
+---
+
+## 5. LuCI / 文档
+
+`luci-app-onu`：
+
+- 页面：PON 状态、硬件身份、认证配置、Internet、IPTV、Voice；
+- IPTV 页改为 `lan-bridge` / `route` 两模式；
+- 只暴露一个 IPTV service VLAN、可选 multicast VLAN；
+- 移除 `iptv_mc` / `veip0` 相关表达；
+- 状态页、硬件页、中文翻译和 DESIGN.md 更新。
+
+`luci-app-pon-status`：
+
+- 状态页 include 和 ACL 更新，适配新的 PON/ONU 状态字段。
+
+---
+
+## 6. 构建 / 工具链修复
+
+- `toolchain/musl/patches/020-fix-bswap-parentheses.patch`
+  - GCC 14 `-Werror=parentheses`。
+- `toolchain/musl/patches/021-guard-ioctl-macros.patch`
+  - musl 与内核 UAPI 的 `_IOC` 宏重复。
+- `toolchain/musl/patches/022-fix-cmsg-nxthdr-sign-compare.patch`
+  - `CMSG_NXTHDR` 的 `size_t`/`ptrdiff_t` 比较。
+- `toolchain/kernel-headers/patches-6.18/001-guard-ioctl-macros.patch`
+  - 内核 UAPI `_IOC` 宏守卫。
+- `toolchain/kernel-headers/patches-6.18/002-guard-socket-if-macros.patch`
+  - `SIOCGSTAMP` / `SIOCGSTAMPNS` / `IFF_VOLATILE` 守卫。
+- `airoha-voice-ctl` 的 musl/kernel ioctl 冲突修复。
+- 预编译二进制：
+  - `feeds/onu_config/airoha-ponctl/files/ponctl`
+  - `feeds/onu_config/airoha-pon-daemons/files/airoha-pond`
+  - `feeds/pon_feed/net/megaco-sip-gateway/files/h248-gateway`
+
+---
+
+## 7. 构建产物
+
+```text
+bin/targets/airoha/an7581/ponwrt-airoha-an7581-fiberhome_hg5582a-squashfs-sysupgrade.itb
+size:   20 MiB
+sha256: 22bd7d2a6c8d0cdbe13ab9bc391289a5346787fe66dd854d960832624a8b51e8
+```
+
+```text
+bin/targets/airoha/an7581/ponwrt-airoha-an7581-fiberhome_hg5582a-initramfs-recovery.itb
+size: 17 MiB
+```
+
+镜像 manifest 关键包：
+
+```text
+airoha-ponctl 0.2.0-r1
+airoha-pond 0.3.0-r2
+kmod-airoha-xpon 6.18.55-r68
+luci-app-onu 0.1.0-r30
+luci-app-omcproxy 0.1.0-r1
+luci-theme-argon 2.4.7-r20260824
+kmod-nf-nethelper-rtsp 6.18.55.1.0.0-r1
+kmod-nf-nathelper-fcc 6.18.55.1.0.0-r10
+megaco-sip-gateway 1.0.0-r1
+asterisk-chan-en75xx 2026.09.24~4222576d-r6
+kmod-airoha-en7581-pcm-spi 6.18.55.2026.09.24~4222576d-r28
+```
+
+---
+
+## 8. 变更规模
+
+- 顶层 OpenWrt：16 个受跟踪文件，约 +989 / -8（不含本 `changes.log`；它本身是新增的第 17 个文件）。
+- `feeds/pon_drivers`：1 个文件，+88。
+- `feeds/pon_feed`：13 个文件（含新增 RTSP 包、H.248 包、Le9642 u-law patch）。
+- `feeds/onu_config`：37 个文件（相对 `/home/ming/openwrt-pon/feeds/onu_config`）。
+
+---
+
+## 9. 已知限制
+
+- IPTV 组播仍走 Linux bridge/omcproxy 的 CPU 路径；
+  原厂 `mtk_xpon_multicast.ko` 的 MDB + port-mask 硬件转发尚未等价实现。
+- H.248 仅支持 text/ABNF over UDP，ASN.1 二进制编码未实现。
+- `br-lan` 仍是 IPTV 的控制面；已建立的单播 L2 流由 PPE L2B 转发，
+  但不是“完全没有 Linux bridge”。
+- 真机验证尚未完成：
+  STB 盲插 LAN1-LAN4、3990 抓包、PPE L2B 条目、route 模式 DHCP、
+  SIP/H.248 注册、Le9642 PCM 音频。
+- 原厂 NPU 固件与开源 `en7581_npu_rv32.bin` 的 mailbox/ABI 仍需实机对照。
+
+---
+
+## 10. 提交参考
+
+顶层：
+
+```text
+7ae37b6042 airoha: add FiberHome HG5582A PON, voice and OEM IPTV data path
+a63074b320 toolchain/musl: parenthesize bswap helpers for -Werror
+afa752744f toolchain: guard duplicate ioctl command macros
+d84bec3e7d toolchain/musl: fix CMSG_NXTHDR sign comparison
+64df529e55 toolchain: guard socket and interface macros
+c0bf9c896b airoha: enable RTSP/FCC helpers, omcproxy UI and Argon theme
+c99a347c3c airoha: default to Argon when the theme is installed
+```
+
+`feeds/pon_drivers`：
+
+```text
+a877ab6 airoha-xpon: expose PON service VLAN translation
+```
+
+`feeds/pon_feed`：
+
+```text
+125adbe airoha-voice-ctl: avoid musl/kernel ioctl macro clash
+c649e87 nf-nethelper-rtsp: add standalone RTSP conntrack/NAT helper
+```
+
+`feeds/onu_config` 没有独立 git 仓库，使用
+`/home/ming/HG5582A/work/patches/onu_config-local.patch` 保存文本改动。
