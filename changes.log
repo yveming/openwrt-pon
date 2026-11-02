@@ -659,3 +659,114 @@ IPTV 测试：在 IPTV 页启用并选择桥接，填写业务 VLAN、设备名�
 出现并已加入 `br-lan`；再切换到路由模式，确认 `network.<接口名>` 创建成功，
 DHCP 或静态地址按预期生效。MAC、Option 60、Client ID 需要时在“网络 → 接口”
 里补。
+
+---
+
+## 18. IPTV service netdev 支持改 MAC，auto 不再重启
+
+### IPTV 设备 MAC
+
+`itv` 是 `airoha-xpon` 驱动创建的 service netdev。原实现只复制 `pon0` 的
+MAC，`netdev_ops` 没有 `ndo_set_mac_address`，所以：
+
+```text
+uci set network.cfg090f15.macaddr='24:D9:04:28:C7:08'
+ip link set dev itv address ...
+RTNETLINK answers: Not supported
+```
+
+UCI 里 MAC 是对的，内核设备改不了，`network.iptv` 只能继续用 `pon0` 的
+地址。删接口、删 device 段、让 IPTV 页重建都无效，因为驱动每次创建都会
+重新复制 `pon0` 的 MAC。
+
+驱动修改：
+
+- `airoha-xpon-service.c` 的 `netdev_ops` 增加：
+
+  ```c
+  .ndo_set_mac_address = eth_mac_addr,
+  .ndo_validate_addr = eth_validate_addr,
+  ```
+
+- `airoha_xpon_service_setup()` 改用 `ether_setup()`，补上标准
+  `header_ops`、`broadcast`、`min_header_len` 等字段。route 模式下 IP
+  栈需要 `header_ops` 才能给 `itv` 构建以太网头。
+- `kmod-airoha-xpon` 版本 `6.18.55-r71`。
+
+修好后 `Network → Devices → itv → MAC address` 会真正落到内核；已有的
+`network.cfg090f15.macaddr` 在 `network reload` 后生效，不需要删设备重建。
+
+### IPTV 路由接口保留用户选项
+
+`/usr/libexec/iptv` 的 `write_route` 不再 `uci delete network.<接口名>`
+后重建，改为原地更新：
+
+- 已有接口且 `device` 等于 IPTV 设备时直接接管，补 `iptv_managed=1`；
+- 保留 `vendorid`、`ip4table`、`ip6table`、`macaddr`、`mtu` 等所有用户选项；
+- 只更新 `device`、`proto`、`auto`、`force_link`、`delegate`、`defaultroute`、
+  `metric`、`iptv_managed`；
+- 切到 DHCP 时只删除过期的 `ipaddr/netmask/gateway/dns`；
+- 同名但 `device` 不匹配、且不是本后端创建的接口仍然拒绝覆盖。
+
+这样当前这种手动创建的 `network.iptv`（带 `vendorid='SCITV'`、
+`ip4table='102'`、`ip6table='102'`）不会再报
+`exists and is not managed by iptv`，保存 IPTV 页也不会丢配置。
+`luci-app-onu` 版本 `0.1.0-r35`。
+
+### auto 不再重启
+
+- 删除 `auto_reboot` 配置项、页面开关和 `pon.init` 里的 `reboot` 路径；
+- 候选失败后原地执行：`ip link down` → `ponctl mode set` →
+  `airoha-pond restart` → `ip link up`，等待 `auto_retry` 秒后试下一个；
+- 保留 `auto_max_attempts`：有光但候选都不注册时回退到第一个候选并停止 auto；
+- 新增无光保护：候选失败后读取 `pcs_signal_detected`，为 `0` 时只记录：
+
+  ```text
+  no optical signal on pon0; waiting for fiber
+  ```
+
+  然后等待光纤，不换模式、不增加尝试次数、不重启；信号恢复后继续当前候选。
+- `airoha-ponctl` 版本 `0.2.0-r3`。
+
+### 镜像
+
+```text
+sysupgrade  0b7297624af8d27b1bf11484672029a4bc9449f3bf383bedfd3cde6e5b89ecef
+recovery    8b30e56de9cefaa89437fdd8791111e272970b33b7386e2712e6c292b8076413
+```
+
+镜像内已确认：
+
+- `kmod-airoha-xpon 6.18.55-r71`，模块引用 `eth_mac_addr`、`ether_setup`、
+  `eth_validate_addr`；
+- `airoha-ponctl 0.2.0-r3`，`/etc/init.d/pon` 中没有 `reboot` 调用，包含
+  `auto_signal_present` 和无光等待；
+- `luci-app-onu 0.1.0-r35`，`/usr/libexec/iptv` 的 `write_route` 为原地更新；
+- `config.js` 和 `/etc/config/pon` 中不再有 `auto_reboot`；
+- 中文 `.lmo` 已包含“模式原地切换，auto 不会重启系统”。
+
+本镜像仍未在 HG5582A 上实测。刷入后验证：
+
+```sh
+ip -br link show itv
+ip link set dev itv address 24:D9:04:28:C7:08
+ip -br link show itv
+uci show network.iptv
+```
+
+第二条应不再报 `Not supported`；`uci show network.iptv` 应保留
+`vendorid`、`ip4table`、`ip6table`。不接光纤设 auto 时，设备应保持运行，
+日志出现 `no optical signal ... waiting for fiber`，不再周期性重启。
+
+如果保留配置刷入，原有 `network` 里的 MAC、`vendorid` 和 table 会保留；
+不保留配置刷入则需要重新填写 IPTV 参数。
+
+本轮补丁：
+
+```text
+patches/onu_config-local.patch
+patches/pon_drivers-local.patch
+```
+
+`onu_config-local.patch` 以 `vendor/OpenWrt_ONU_CONFIG` 为基线，
+`pon_drivers-local.patch` 以 `feeds/pon_drivers` 的 `783e645` 为基线。
