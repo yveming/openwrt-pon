@@ -174,7 +174,7 @@ diff --git a/net/netfilter/nf_flow_table_path.c b/net/netfilter/nf_flow_table_pa
  		return -ENOENT;
  
  	nf_route(nft_net(pkt), &other_dst, &fl, false, nft_pf(pkt));
-@@ -421,18 +487,32 @@
+@@ -421,17 +487,26 @@ static int nft_flow_route_routing(const struct nft_pktinfo *pkt,
  		dst_release(this_dst);
  		return -ENOENT;
  	}
@@ -189,26 +189,21 @@ diff --git a/net/netfilter/nf_flow_table_path.c b/net/netfilter/nf_flow_table_pa
  
 -	if (route->tuple[dir].xmit_type == FLOW_OFFLOAD_XMIT_NEIGH &&
 -	    route->tuple[!dir].xmit_type == FLOW_OFFLOAD_XMIT_NEIGH) {
--		if (nft_dev_forward_path(pkt, route, ct, dir, ft) ||
--		    nft_dev_forward_path(pkt, route, ct, !dir, ft))
--			return -ENOENT;
+-		if (nft_dev_forward_path(pkt, route, ct, dir, ft) < 0 ||
+-		    nft_dev_forward_path(pkt, route, ct, !dir, ft) < 0)
+-			goto err_dst_release;
 +	if (route->tuple[dir].xmit_type == FLOW_OFFLOAD_XMIT_NEIGH ||
 +	    route->tuple[dir].xmit_type == FLOW_OFFLOAD_XMIT_XFRM) {
 +		if (nft_dev_forward_path(pkt, route, ct, dir, ft))
-+			goto err_release;
++			goto err_dst_release;
 +	}
 +	if (route->tuple[!dir].xmit_type == FLOW_OFFLOAD_XMIT_NEIGH ||
 +	    route->tuple[!dir].xmit_type == FLOW_OFFLOAD_XMIT_XFRM) {
 +		if (nft_dev_forward_path(pkt, route, ct, !dir, ft))
-+			goto err_release;
++			goto err_dst_release;
  	}
  
  	return 0;
-+
-+err_release:
-+	dst_release(route->tuple[dir].dst);
-+	dst_release(route->tuple[!dir].dst);
-+	return -ENOENT;
  }
  
  static int nft_flow_route_dir(const struct nft_pktinfo *pkt,
