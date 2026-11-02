@@ -280,6 +280,9 @@ define Device/fiberhome_hg5582a
   DEVICE_VENDOR := FiberHome
   DEVICE_MODEL := HG5582A
   DEVICE_DTS := an7581-fiberhome-hg5582a
+  # Existing HG5382A U-Boot/sysupgrade images must accept this FIT and vice
+  # versa; both boards share the same flash layout and network data.
+  SUPPORTED_DEVICES += fiberhome,hg5382a
   KERNEL_LOADADDR := 0x8c000000
   BLOCKSIZE := 128k
   PAGESIZE := 2048

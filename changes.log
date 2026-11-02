@@ -228,7 +228,7 @@ ONU 页面也不会拉入 PBX。
 ```text
 bin/targets/airoha/an7581/ponwrt-airoha-an7581-fiberhome_hg5582a-squashfs-sysupgrade.itb
 size:   20 MiB
-sha256: 3bbbb523387a82311940070e3324e97fd469d9f05636addcd7d50482c0103196
+sha256: 5dd09e7090dc6e50c70a569367c00389c5f70d37bdbd94dbce5d64bdb2c0a339
 ```
 
 ```text
@@ -257,7 +257,7 @@ kmod-airoha-en7581-pcm-spi 6.18.55.2026.09.24~4222576d-r28
 
 ## 8. 变更规模
 
-- 顶层 OpenWrt：18 个受跟踪文件，约 +1100 / -8（不含本 `changes.log`；它本身是新增的第 19 个文件）。
+- 顶层 OpenWrt：18 个受跟踪文件，约 +1103 / -8（不含本 `changes.log`；它本身是新增的第 19 个文件）。
 - `feeds/pon_drivers`：9 个文件，约 +501 / -3。
 - `feeds/pon_feed`：13 个文件（含新增 RTSP 包、H.248 包、Le9642 u-law patch）。
 - `feeds/onu_config`：41 个文件（相对 `/home/ming/openwrt-pon/feeds/onu_config`，含 2 个预编译二进制）。
@@ -548,6 +548,10 @@ Firmware target 'fiberhome,hg5582a' does not match this board.
   ```
 
   这样 5382A U-Boot 的第一个字符串校验能通过，镜像不再需要改 U-Boot。
+
+- `Device/fiberhome_hg5582a` 增加 `SUPPORTED_DEVICES += fiberhome,hg5382a`。
+  这样当前运行 5382A 的系统做普通 `sysupgrade` 时，镜像 metadata 同时接受
+  `fiberhome,hg5382a` 和 `fiberhome,hg5582a`，不需要 `-F` 强刷。
 
 - 新增 `target/linux/airoha/base-files/lib/preinit/05_fiberhome_board_name`：
   如果 `/proc/device-tree/compatible` 里同时存在 `fiberhome,hg5582a`，就把
