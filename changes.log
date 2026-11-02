@@ -617,7 +617,8 @@ IPTV 页完成，否则每次都要去“网络 → 接口”重复操作。现�
 - 配置值与运行值不一致时同时显示两者。
 
 OMCI / OAM 身份块按 `active_mode` 优先、`auto_selected` 次之判断；无法确定时
-两块都隐藏，不再默认当作 XG-PON。修改线路模式仍只在 ONU 认证页。
+两块都隐藏，不再默认当作 XG-PON。固定模式下忽略可能残留的 `auto_selected`，
+避免按旧的自动候选显示错误的身份协议。修改线路模式仍只在 ONU 认证页。
 
 ### 中文翻译
 
@@ -630,8 +631,8 @@ OMCI / OAM 身份块按 `active_mode` 优先、`auto_selected` 次之判断；�
 本轮镜像：
 
 ```text
-sysupgrade  a3550901d20e41d491e3cb54d204612d6f95652facb214b00cfcbb26af35cab1
-recovery    6af93c506495e455df7e84b383925404bb5f49078844a50b97c17cae83a35939
+sysupgrade  46aba18d607c9e456c0daf8580b8138fb062b5ab8cd221175330cae73880193b
+recovery    911569c253ea3fc6d99622b59956d3337d74033ed4eb8262ce2abe8e2025ff8c
 ```
 
 镜像内已确认：
