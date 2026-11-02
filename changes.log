@@ -566,3 +566,95 @@ Firmware target 'fiberhome,hg5582a' does not match this board.
 
 后续如果希望 U-Boot recovery 也走 2.5G 口，需要单独给 U-Boot 增加
 `gdm4` 节点和 GPY211/通用 C45 PHY 驱动；这不影响当前 5582A 系统镜像。
+
+---
+
+## 17. IPTV 页面恢复桥接/路由配置，硬件页线路模式改为只读
+
+上一版把 IPTV 页缩成“只创建业务接口”，实践中发现桥接和路由的基础配置仍应在
+IPTV 页完成，否则每次都要去“网络 → 接口”重复操作。现在恢复为原厂习惯的
+**桥接 / 路由**两种模式，页面和说明里不再使用“三层 / L3”字样。
+
+### IPTV 页面
+
+保留字段：
+
+- 启用；
+- 模式：桥接 / 路由；
+- 业务 VLAN；
+- 组播 VLAN（可空，空表示组播走业务 VLAN）；
+- 设备名；
+- 路由模式额外显示：路由接口名、协议（DHCP / 静态）、地址、子网掩码、网关、DNS。
+
+删除：
+
+- `DHCP Option 60` 说明行；
+- `Independent services` 说明行；
+- MAC 地址、DHCP Option 60、Client ID 输入项。这些选项在接口创建后到
+  “网络 → 接口”里继续配置，页面顶部说明中已写明。
+
+### IPTV 后端
+
+`/usr/libexec/iptv` 恢复为：
+
+- 读取 `enabled`、`mode`、`service_vlan`、`multicast_vlan`、`device_name`、
+  `interface_name`、`proto`、`ipaddr`、`netmask`、`gateway`、`dns`、`uplink`；
+- 通过 `/sys/class/net/<uplink>/xpon/service` 创建逻辑业务接口；
+- 桥接模式把设备加入 `br-lan`；
+- 路由模式创建带 `iptv_managed=1` 的 `network.<interface_name>` 接口，
+  设置 `defaultroute=0`、`metric=2000`，DHCP 或静态地址按页面填写；
+- 切换模式、改名或停用时删除旧设备在桥中的成员和旧的受管接口；
+- 不写 `dhcp`、不创建 Option 60 match、不重启 dnsmasq、不创建防火墙 zone
+  或策略路由。
+
+### 硬件页
+
+`PON Mode` 的线路模式改为只读 `DummyValue`，显示实际有效模式：
+
+- 固定模式显示对应速率；
+- `auto` 且运行中显示 `自动（当前：…）`；
+- `auto` 未注册时显示上次选择或“尚未选择”；
+- 配置值与运行值不一致时同时显示两者。
+
+OMCI / OAM 身份块按 `active_mode` 优先、`auto_selected` 次之判断；无法确定时
+两块都隐藏，不再默认当作 XG-PON。修改线路模式仍只在 ONU 认证页。
+
+### 中文翻译
+
+`po/zh_Hans/onu.po` 补齐本轮新增字符串，`msgfmt -c` 通过；镜像内
+`/usr/lib/lua/luci/i18n/onu.zh-cn.lmo` 已包含“路由接口名”“桥接模式把 IPTV
+设备加入 br-lan”等翻译。
+
+### 镜像
+
+本轮镜像：
+
+```text
+sysupgrade  a3550901d20e41d491e3cb54d204612d6f95652facb214b00cfcbb26af35cab1
+recovery    6af93c506495e455df7e84b383925404bb5f49078844a50b97c17cae83a35939
+```
+
+镜像内已确认：
+
+- `luci-app-onu 0.1.0-r34`；
+- FIT 第一个 compatible 仍是 `fiberhome,hg5382a`，第二个是 `fiberhome,hg5582a`；
+- `profiles.json` 的 `supported_devices` 同时包含 `fiberhome,hg5582a` 和
+  `fiberhome,hg5382a`；
+- preinit 脚本 `05_fiberhome_board_name` 存在，启动后把 `board_name` 恢复为
+  `fiberhome,hg5582a`；
+- IPTV 页面、后端脚本和中文 `.lmo` 均为本轮版本。
+
+本镜像尚未在 HG5582A 上实测。刷入时不要保留配置；启动后重点检查：
+
+```text
+cat /tmp/sysinfo/board_name
+cat /proc/device-tree/model
+ip -br link
+ponctl --device pon0 status --json
+logread | grep 'PHY FreqDet'
+```
+
+IPTV 测试：在 IPTV 页启用并选择桥接，填写业务 VLAN、设备名，保存后确认设备
+出现并已加入 `br-lan`；再切换到路由模式，确认 `network.<接口名>` 创建成功，
+DHCP 或静态地址按预期生效。MAC、Option 60、Client ID 需要时在“网络 → 接口”
+里补。
