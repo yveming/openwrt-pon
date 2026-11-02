@@ -32,6 +32,11 @@ trap restore EXIT INT TERM
 
 status=0
 
+# 强制重建包元数据。tmp/.packageinfo 是增量扫描的缓存（include/toplevel.mk 的
+# scan_unchanged 按 mtime 判断），上游删包/改名后若缓存没刷新，defconfig 会用旧
+# 符号表，校验就会"假绿"——kmod-iptables 被上游删除时就漏过一次。
+rm -f tmp/.packageinfo tmp/.config-package.in tmp/.config-feeds.in
+
 for seed in "$@"; do
 	[ -f "$seed" ] || { echo "跳过不存在的 $seed"; continue; }
 	echo "== $seed"
@@ -43,13 +48,17 @@ for seed in "$@"; do
 		continue
 	fi
 
-	grep -E '^CONFIG_[A-Za-z0-9_]+=[ym]$' "$seed" > "$tmpdir/syms" || : > "$tmpdir/syms"
+	# 注意字符类里要包含 `-`：OpenWrt 的 package 符号大量带连字符
+	# （CONFIG_PACKAGE_kmod-iptables、CONFIG_PACKAGE_luci-app-*），只写
+	# [A-Za-z0-9_] 会静默跳过它们 —— 1710 种子 1282 个符号里有 292 个被漏掉。
+	grep -E '^CONFIG_[A-Za-z0-9_-]+=[ym]$' "$seed" > "$tmpdir/syms" || : > "$tmpdir/syms"
 	: > "$tmpdir/missing"
 
 	while IFS= read -r line; do
 		sym="${line%%=*}"
 		want="${line##*=}"
-		got="$(grep -E "^$sym=" .config | head -n1 || true)"
+		# 用固定字符串匹配，避免符号里的 `+`/`.` 被当成正则
+		got="$(grep -F -- "$sym=" .config | head -n1 || true)"
 		[ "$got" = "$sym=$want" ] && continue
 		if [ -f "$allowlist" ] && grep -qxF "$sym" "$allowlist"; then
 			continue
