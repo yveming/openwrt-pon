@@ -32,6 +32,17 @@ ImmortalWrt 上游合并不逐项展开，仅记录会影响本设备构建或�
 校验：6 个种子 0 丢弃（1710 1276 / 2010-2g 983 / 2010 889 / an7581 1144 /
 an7583 1105 / release 10）。
 
+### 去掉误选的 OpenVPN DCO 内核模块
+
+`configs/an7581.config`、`an7583.config` 从 pbs05 的旧配置里继承了
+`CONFIG_PACKAGE_kmod-ovpn-backports=y`（OpenVPN data channel offload）。它只对
+`openvpn-openssl` 有用，而种子并没有选 OpenVPN；该模块自身依赖
+`kmod-udptunnel4/6`、`kmod-crypto-lib-chacha20poly1305`、`kmod-crypto-lib-curve25519`
+等一串 tunnel/crypto 模块 —— 这就是构建列表里"无缘无故"多出来的那几个。
+
+已从两个种子删除；`make defconfig` 之后 `kmod-udptunnel4/6` 与 crypto-lib 模块
+随之消失（有别的包需要时 Kconfig 仍会自动 select）。
+
 ## 2026-11-02
 
 ### 同步 immortalwrt 上游（401 个提交）
