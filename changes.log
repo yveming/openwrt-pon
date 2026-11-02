@@ -820,16 +820,17 @@ auto 状态机、FreqDet 门控、`auto_reboot`、无光等待代码随 `pon.ini
 
 ### 状态查询超时
 
-状态页的 `ponctl status` / `pondctl status` 调用统一用 BusyBox `timeout` 包住：
+状态页的 `ponctl status` / `pondctl status` 调用统一经过两个真实路径的包装脚本：
 
 ```text
-/usr/bin/timeout -s KILL 2 /usr/sbin/ponctl ...
-/usr/bin/timeout -s KILL 2 /usr/bin/pondctl ...
+/usr/libexec/pon-status  -> timeout -s KILL 2 /usr/sbin/ponctl ...
+/usr/libexec/pond-status -> timeout -s KILL 2 /usr/bin/pondctl ...
 ```
 
-- 驱动/PHY 卡住时最多等 2 秒；
+- 驱动/PHY/Unix socket 卡住时最多等 2 秒；
 - 状态页拿到错误后显示 `Device unavailable`，不会让整个 LuCI 卡死；
-- ACL 增加对应的 `timeout ...` 执行白名单；
+- ACL 放行两个包装脚本；
+- 直接用 `/usr/bin/timeout` 会被 rpcd 的 realpath 校验解析成 `/bin/busybox`，所以必须用包装脚本；
 - 硬件页不再调用状态查询。
 
 `airoha-ponctl`/`airoha-pon-daemons` 仍使用 feed 里的预编译静态二进制；Rust 源码里的原生 socket 超时没有随这次镜像重编，当前超时行为由 LuCI 侧 `timeout` 保证。
@@ -842,8 +843,8 @@ auto 状态机、FreqDet 门控、`auto_reboot`、无光等待代码随 `pon.ini
 镜像：
 
 ```text
-sysupgrade  157b7a7830f813f7e709cf02681c5b0ae039d62a945c9faaee4c0003cf9150be
-recovery    20cd6eedf1a5d3b5713b240dfa3f358eb9f131fa5c6f5a5d758c24f280423a34
+sysupgrade  ae39740d07c10d8bfdd644a53cf58bd55dd7ab787ffdf461f405f674f8d633d3
+recovery    648c75125a6b7314975d3acb43df95ce21c00a1c25b4fe9a451eb020de552770
 ```
 
 镜像内已确认：
