@@ -109,6 +109,11 @@ feed 没挂上、包被移出主树时，符号会被 Kconfig **静默丢弃**�
   一旦上游（openwrt 或 kernel）接收了正式的 fraglist/GRO 修复，需要重新评估这个补丁是否还必要；
   上游 bump 内核时 `scripts/check-patch-stack.sh` 会先把冲突暴露出来 —— 提交过 PR 的那个分支
   (`kernel-fix-fraglist-gro-multicast`) 只是这个补丁的引入点，其提交已在 `master`/`pon` 里，不必保留。
+- **上游删内核选项**：`immortalwrt` 会定期清理已失效的 `CONFIG_KERNEL_*`（例如 2026-11-02
+  那次同步删掉 `MEMCG_KMEM`、`CIFS_ACL`、`HFS_FS_POSIX_ACL`、`HFSPLUS_FS_POSIX_ACL`、
+  `NFS_ACL_SUPPORT`）以及整个 kernel 6.12 支持。种子里残留这些符号不会报错，但
+  `make defconfig` 会静默丢弃 —— `scripts/check-seed-symbols.sh` 会报「符号被丢弃」，
+  按提示从 `configs/*.config` 删掉即可。
 - `patches/feeds/<feed>/...` 只对 `feeds.conf.default` 里存在的 feed 生效；feed 被移除后
   目录要一起删，否则构建前会打印 "feed is not present" 并跳过。
 - **`gh` 会认错仓库**：checkout 里一旦存在名为 `upstream` 的 remote（同步流程会加），

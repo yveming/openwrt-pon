@@ -3,6 +3,47 @@
 本文件记录固件仓库的重要功能、稳定性和维护变更。常规的
 ImmortalWrt 上游合并不逐项展开，仅记录会影响本设备构建或运行行为的内容。
 
+## 2026-11-02
+
+### 同步 immortalwrt 上游（401 个提交）
+
+- 合并 `immortalwrt/immortalwrt` `e695009c15..89f1ef18c8`（401 个提交），
+  `vendor.lock` 的 `upstream` 基线随之前移到 `89f1ef18c8`。
+- 上游放弃 kernel 6.12（`32c7a1346e`）：`target/linux/generic/*-6.12` 随之删除
+  （`pending-6.12` 上游自己还留着 6 个 media 补丁，按上游状态保留）。
+- 上游新增 backport `706-01`（把 `net_device_path_ctx` 传入
+  `dev_fill_forward_path()`）与 `708/709` 系列（flowtable priority / VLAN match），
+  与本地 675 桥接卸载系列正面相撞。处理：
+  - `675-01` 只剩 `br_fdb_find_rcu` 导出（同时改名）；`__dev_fill_forward_path`
+    已由上游 706-01 以 ctx 形式提供；
+  - `675-02` 按新 API 重写：ctx 由调用方预填（含 `ieee80211`），daddr 写回
+    ctx 后调用 `dev_fill_forward_path(ctx, stack)`；`nft_flow_route` 拆成
+    routing / bridging 两条路径；
+  - `675-04`（VLAN passthrough）注入点随新控制流改写；
+  - `9999-11`（xfrm/SOE 绑定）改写进 `nft_flow_route_routing`，复用
+    `err_dst_release`；
+  - `9993`（PPE cache-miss 桥接路径）改用 `dev_fill_forward_path(ctx, stack)`。
+  补丁链从「710 个中 4 个失败」恢复为 0 失败。
+- 冲突裁决：`firewall4/Makefile` 保留本地 `PKG_RELEASE=5`（fullcone 补丁与上游
+  刷新后的版本逐字节一致）；`915-01` 取上游（内容相同，仅按新内核刷新上下文）；
+  `generic/config-6.12` 接受上游删除。
+- `configs/*.config`：删掉上游已移除的 5 个内核选项
+  （`MEMCG_KMEM`、`CIFS_ACL`、`HFS_FS_POSIX_ACL`、`HFSPLUS_FS_POSIX_ACL`、
+  `NFS_ACL_SUPPORT`，见上游 `e4722f914b` / `c48a071499`）。
+- 验证：`scripts/check-patch-stack.sh airoha` → 710 个补丁 0 失败；
+  `make target/linux/compile`（an7581 种子）通过；`firewall4` 的两个补丁在新
+  Git HEAD（`e6f600c4`，2026-10-29）上仍可干净套用；6 个种子符号校验 0 丢弃。
+
+### 供应商状态
+
+- `pbs05/ponwrt`：**无新提交**（tip `03c1345447` 已在 `pon` 里）。
+- `naoki66`：新增 5 个提交，本轮**未吸收**（按「只挑单个补丁」策略）：
+  - `c1794cceb7` an7581/an7583/en7523 内核配置把 bridge flowtable 相关符号改为内置；
+  - `8aa505c865` 新增 `920-17`：PPPoE 会话头计入 PPE/WAN egress MTU（修全尺寸
+    PPPoE 帧被硬件丢弃），依赖其 `920-16`，与我们当前的 airoha 补丁栈上下文不符，
+    留作后续 topic 单独移植；
+  - `748b4b28ed` 文档、`405d518bca` `luci-app-clientstatus` 菜单修复。
+
 ## 2026-10-25
 
 ### 同步 immortalwrt 上游（179 个提交）
