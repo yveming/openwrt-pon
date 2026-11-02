@@ -13,6 +13,12 @@ permissions:
 jobs:
   check:
     runs-on: ubuntu-latest
+    # gh 在 checkout 里靠 git remote 猜"当前仓库"：只要存在名为 upstream 的 remote，
+    # 它就会认为当前仓库是 immortalwrt/immortalwrt（fork 语义），于是 issue 操作全部
+    # 打到上游去 → "GraphQL: Resource not accessible by integration (createIssue)"。
+    # 用 GH_REPO 钉死，不依赖它猜。
+    env:
+      GH_REPO: ${{ github.repository }}
     steps:
       - name: Checkout
         uses: actions/checkout@v5
