@@ -3,6 +3,35 @@
 本文件记录固件仓库的重要功能、稳定性和维护变更。常规的
 ImmortalWrt 上游合并不逐项展开，仅记录会影响本设备构建或运行行为的内容。
 
+## 2026-11-03
+
+### 修好种子校验脚本的两个盲点，并清理由此暴露的种子残留
+
+合并后的 `make defconfig` 暴露出 `check-seed-symbols.sh` 一直在给假绿：
+
+- **元数据缓存**：脚本直接用 `tmp/.packageinfo`。上游删包后若增量扫描没刷新，校验会拿
+  旧符号表比对 —— `kmod-iptables` 被上游删除（`ca454c00b6`）时就这样漏过。现在每次
+  运行前强制删掉 `tmp/.packageinfo`、`tmp/.config-package.in`、`tmp/.config-feeds.in`。
+- **符号正则漏连字符**：`^CONFIG_[A-Za-z0-9_]+=` 匹配不到 `kmod-*`、`luci-app-*` 这类
+  名字。1710 种子 1282 个符号里有 292 个从未被检查（990 → 1276）。正则补上 `-`，
+  查找改用固定字符串，避免符号里的 `+`/`.` 被当成正则。
+
+由此暴露并清理的种子残留：
+
+| 符号 | 原因 |
+| --- | --- |
+| `kmod-iptables`（1710/2010/2010-2g） | 上游删除（`ca454c00b6`，KCONFIG 并入 `kmod-nf-ipt`） |
+| `kmod-nf-log6` | 上游删除（`313889ee5c`） |
+| `kmod-crypto-lib-chacha20poly1305` / `curve25519` | 隐藏包，只由选择者（wireguard）拉起；种子已关 wireguard，属残留 |
+| `kmod-udptunnel4/6`（1710/2010/2010-2g） | 隐藏包，没有选择者 |
+| `luci-i18n-airoha-zh-cn`（1710/2010） | `luci-app-airoha` 已不存在（现为 `-npu`/`-factory`/`-fancontrol`/`-recovery`） |
+| `luci-i18n-iptv-zh-cn`、`luci-i18n-pon-zh-cn`（2010） | 对应 app 未选中，i18n 是孤儿 |
+| `luci-i18n-airoha-npu-zh-cn`（2010-2g） | 该 app 没有 zh-cn 翻译包 |
+| `MODULE_DEFAULT_luci-app-iptv`、`MODULE_DEFAULT_luci-i18n-iptv-zh-cn`（an7581） | 符号不存在 |
+
+校验：6 个种子 0 丢弃（1710 1276 / 2010-2g 983 / 2010 889 / an7581 1144 /
+an7583 1105 / release 10）。
+
 ## 2026-11-02
 
 ### 同步 immortalwrt 上游（401 个提交）
