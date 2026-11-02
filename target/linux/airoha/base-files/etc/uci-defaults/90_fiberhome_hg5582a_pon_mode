@@ -1,0 +1,13 @@
+#!/bin/sh
+# HG5582A is normally deployed on an asymmetric 10G-EPON line.  Default a
+# fresh configuration to that mode; the line-mode dropdown itself stays the
+# generic four-mode list, so other devices and other lines are unchanged.
+[ "$(cat /tmp/sysinfo/board_name 2>/dev/null)" = 'fiberhome,hg5582a' ] || exit 0
+
+case "$(uci -q get pon.line0.mode)" in
+xgpon|epon-10g-1g) ;;
+*) uci -q set pon.line0.mode='epon-10g-1g' ;;
+esac
+
+uci -q commit pon
+exit 0

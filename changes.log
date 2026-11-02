@@ -770,3 +770,89 @@ patches/pon_drivers-local.patch
 
 `onu_config-local.patch` 以 `vendor/OpenWrt_ONU_CONFIG` 为基线，
 `pon_drivers-local.patch` 以 `feeds/pon_drivers` 的 `783e645` 为基线。
+
+---
+
+## 19. 非语音/IPTV 页面回原版，固定模式重激活，状态查询加超时
+
+按“先不做 auto、非语音/IPTV 页面尽量回 luci-app-onu 原版”的决定调整。
+
+### 页面
+
+- `hardware.js` 回原版并删除整个 `PON Mode` 区块：
+  - 硬件页不再显示、也不再编辑线路模式；
+  - 不再调用 `ponctl status`，硬件页不会因为 PON 状态异常卡死；
+  - OMCI/OAM 身份块仍按 UCI 里已保存的 `pon.xpon.mode` 选择。
+- `config.js` 回原版，但删掉 OMCI/OAM 两个 section 的 `s.filter`：
+  - 两套认证字段始终渲染，切线路模式时只隐藏不相关的卡片；
+  - 认证参数不再需要“先保存一次模式”才出现；
+  - 线路模式下拉框恢复原版 4 个 10G 模式，不再加 `supported_modes` 设备过滤；
+  - `mode=auto` 选项随原版一起移除。
+- `internet.js`、`internet-apply` 回原版。
+- `status.js`、`diagnostics.js` 本来就是原版，未改；实际模式、配置模式、`Line stopped` 等继续在状态页显示。
+
+### HG5582A 默认模式
+
+新增 `target/linux/airoha/base-files/etc/uci-defaults/90_fiberhome_hg5582a_pon_mode`：
+
+- 只对 `board_name=fiberhome,hg5582a` 生效；
+- 新配置默认 `pon.line0.mode='epon-10g-1g'`；
+- 已有 `xgpon`/`epon-10g-1g` 保持不变；
+- 不写 `supported_modes`，不改其他设备。
+
+`luci-app-onu` 仍是通用页面，设备差异只在 board uci-defaults。
+
+### 固定模式生效
+
+`pon.init` 回原版，并在固定模式分支补上显式重激活：
+
+```text
+ip link down
+ponctl mode set
+ponctl identity set
+airoha-pond restart
+ip link up
+```
+
+这样运行时改固定模式立即生效，不需要重启系统；也不会出现 `mode_pending` 但线路一直 stopped。
+
+auto 状态机、FreqDet 门控、`auto_reboot`、无光等待代码随 `pon.init`/`pon.config` 回原版一起移除。旧配置里如果还保留 `mode=auto`，不再支持；刷机时不保留配置即可。
+
+### 状态查询超时
+
+`airoha-ponctl` 的 netlink socket 增加 `SO_RCVTIMEO=2s`：
+
+- `ponctl status` 在驱动/PHY 卡住时最多等 2 秒；
+- 状态页拿到错误后显示 `Device unavailable`，不会让整个 LuCI 卡死；
+- 不再依赖硬件页调用状态查询。
+
+### 版本与镜像
+
+- `airoha-ponctl 0.2.0-r4`
+- `luci-app-onu 0.1.0-r36`
+
+镜像：
+
+```text
+sysupgrade  42953cb62ce7dc367f563bca7279e2355ecea226f3a9c5d27983cd18ec8c4997
+recovery    019b486817752d380b0975bae7811f12c778de4d883e40c5f8969fc1a5ee9408
+```
+
+镜像内已确认：
+
+- 硬件页没有 `PON Mode`、没有 `ponctl` 调用；
+- 认证页没有 `s.filter`，四个 10G 模式仍在；
+- `pon.init` 固定模式包含 down/up，且没有 auto 逻辑；
+- HG5582A uci-defaults 存在并默认 `epon-10g-1g`；
+- `internet-apply` 与 vendor 原版一致；
+- IPTV/语音文件和页面保留。
+
+本镜像未在设备上实测。刷入时不保留配置；启动后重点验证：
+
+```sh
+uci show pon.line0
+ip -br link show pon0
+timeout 5 ponctl --device pon0 status --json
+```
+
+认证页切换 `xgpon` / `epon-10g-1g` 时，对应认证字段应立即出现；硬件页不应再卡；状态页在异常时应最多等 2 秒后显示错误。
