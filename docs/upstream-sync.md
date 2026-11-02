@@ -111,3 +111,9 @@ feed 没挂上、包被移出主树时，符号会被 Kconfig **静默丢弃**�
   (`kernel-fix-fraglist-gro-multicast`) 只是这个补丁的引入点，其提交已在 `master`/`pon` 里，不必保留。
 - `patches/feeds/<feed>/...` 只对 `feeds.conf.default` 里存在的 feed 生效；feed 被移除后
   目录要一起删，否则构建前会打印 "feed is not present" 并跳过。
+- **`gh` 会认错仓库**：checkout 里一旦存在名为 `upstream` 的 remote（同步流程会加），
+  `gh` 就认为当前仓库是 `immortalwrt/immortalwrt`（fork 语义），于是 `gh issue create` /
+  `comment` / `close` 全部打到上游，报 `GraphQL: Resource not accessible by integration`。
+  `check-upstream.yml` 因此在 2026-10-22 / 10-28 / 10-31 / 11-01 连续失败（token 权限一直是对的）。
+  修法：job 级 `env: GH_REPO: ${{ github.repository }}`（或用 `--repo "$GITHUB_REPOSITORY"`）。
+  任何新 workflow 里只要调 `gh` 又加了 `upstream` remote，都要显式钉住仓库。
