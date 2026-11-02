@@ -18,10 +18,9 @@ Signed-off-by: Ryan Chen <rchen14b@gmail.com>
 Assisted-by: Codex:gpt-5.6-sol
 Signed-off-by: Yanghan Ye <yyh94306@gmail.com>
 ---
-diff --git a/net/netfilter/nf_flow_table_path.c b/net/netfilter/nf_flow_table_path.c
 --- a/net/netfilter/nf_flow_table_path.c
 +++ b/net/netfilter/nf_flow_table_path.c
-@@ -151,6 +151,30 @@
+@@ -158,6 +158,30 @@ struct nft_forward_info {
  	enum flow_offload_xmit_type xmit_type;
  };
  
@@ -49,20 +48,22 @@ diff --git a/net/netfilter/nf_flow_table_path.c b/net/netfilter/nf_flow_table_pa
 +	rcu_read_unlock();
 +}
 +
- static void nft_dev_path_info(const struct net_device_path_stack *stack,
- 			      struct nft_forward_info *info,
- 			      unsigned char *ha, struct nf_flowtable *flowtable)
-@@ -286,8 +310,10 @@
+ static int nft_dev_path_info(const struct net_device_path_stack *stack,
+ 			     struct nft_forward_info *info,
+ 			     unsigned char *ha, struct nf_flowtable *flowtable)
+@@ -309,8 +333,12 @@ static int nft_dev_forward_path(const struct nft_pktinfo *pkt,
  		nft_br_vlan_dev_fill_forward_path(pkt, &ctx);
  	}
  
--	if (nft_dev_fill_forward_path(&ctx, route, dst, ct, dir, ha, &stack) >= 0)
-+	if (nft_dev_fill_forward_path(&ctx, route, dst, ct, dir, ha, &stack) >= 0) {
-+		nft_fill_vlan_passthrough_info(pkt, &info);
- 		nft_dev_path_info(&stack, &info, ha, &ft->data);
-+	}
- 
- 	if (!info.indev || !nft_flowtable_find_dev(info.indev, ft))
+-	if (nft_dev_fill_forward_path(&ctx, route, dst, ct, dir, ha, &stack) < 0 ||
+-	    nft_dev_path_info(&stack, &info, ha, &ft->data) < 0)
++	if (nft_dev_fill_forward_path(&ctx, route, dst, ct, dir, ha, &stack) < 0)
++		return -ENOENT;
++
++	nft_fill_vlan_passthrough_info(pkt, &info);
++
++	if (nft_dev_path_info(&stack, &info, ha, &ft->data) < 0)
  		return -ENOENT;
--- 
-2.43.0
+ 
+ 	if (info.outdev)
+
