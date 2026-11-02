@@ -11,8 +11,8 @@ On Airoha Ethernet ingress, an 802.1Q tag can remain inline in the Ethernet
 header instead of being exposed through skb VLAN metadata. Populate
 net_device_path_ctx from a logical VLAN device, an skb hardware VLAN tag,
 an inline VLAN header, or the ingress bridge-port PVID when VLAN filtering is
-enabled, using the bridge's configured VLAN protocol. Use
-__dev_fill_forward_path() so the bridge FDB lookup sees that context. In
+enabled, using the bridge's configured VLAN protocol. Pass that context to
+dev_fill_forward_path() so the bridge FDB lookup sees it. In
 particular, do not replace a tagged trunk frame with the trunk port PVID.
 Copy the resulting egress VLAN stack into the fallback flow template so PPE
 performs the same tag push or pop selected by the bridge path.
@@ -47,7 +47,7 @@ index 144ba47..fc74cb8 100644
  
  	if (!is_valid_ether_addr(eh->h_source) ||
  	    !is_valid_ether_addr(eh->h_dest))
-@@ -1369,18 +1374,45 @@ airoha_ppe_foe_prepare_bridge_subflow(struct airoha_ppe *ppe,
+@@ -1369,18 +1374,46 @@ airoha_ppe_foe_prepare_bridge_subflow(struct airoha_ppe *ppe,
  	if (!skb->dev)
  		return false;
  
@@ -95,7 +95,8 @@ index 144ba47..fc74cb8 100644
 +		ctx.num_vlans = 1;
 +	}
 +
-+	err = __dev_fill_forward_path(&ctx, eh->h_dest, &stack);
++	ether_addr_copy(ctx.daddr, eh->h_dest);
++	err = dev_fill_forward_path(&ctx, &stack);
  	if (err || stack.num_paths < 2 ||
  	    stack.path[0].type != DEV_PATH_BRIDGE) {
  		rcu_read_unlock();
