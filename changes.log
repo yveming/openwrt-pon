@@ -590,8 +590,8 @@ IPTV 页完成，否则每次都要去“网络 → 接口”重复操作。现�
 
 - `DHCP Option 60` 说明行；
 - `Independent services` 说明行；
-- MAC 地址、DHCP Option 60、Client ID 输入项。这些选项在接口创建后到
-  “网络 → 接口”里继续配置，页面顶部说明中已写明。
+- MAC 地址、DHCP Option 60、Client ID 输入项。路由模式下这些选项在接口
+  创建后到“网络 → 接口”里继续配置，页面顶部说明中已写明。
 
 ### IPTV 后端
 
@@ -631,8 +631,8 @@ OMCI / OAM 身份块按 `active_mode` 优先、`auto_selected` 次之判断；�
 本轮镜像：
 
 ```text
-sysupgrade  46aba18d607c9e456c0daf8580b8138fb062b5ab8cd221175330cae73880193b
-recovery    911569c253ea3fc6d99622b59956d3337d74033ed4eb8262ce2abe8e2025ff8c
+sysupgrade  0f3a7dd94c6820913a6e6dde9b6da6836430c021d331184701796255b55eb22d
+recovery    d290404a28463ea9b3011e8ac0a75f48eb4eeb3336a3aaaef38cd4b0a20262da
 ```
 
 镜像内已确认：
