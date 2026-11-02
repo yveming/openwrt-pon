@@ -280,9 +280,12 @@ kmod-airoha-en7581-pcm-spi 6.18.55.2026.09.24~4222576d-r28
 
 ## 10. 提交参考
 
-顶层（本次清理提交之前）：
+顶层（当前）：
 
 ```text
+f405a81ddc airoha: make HG5582A images compatible with HG5382A U-Boot
+27237847f4 pon: gate auto candidates on PCS FreqDet lock
+4beb134e60 hg5582a: finalize VOIP and multi-profile fixes
 7360b1f4be airoha-xpon: expose PCS auto-mode diagnostics
 72919aa65b pon: align auto mode with the OEM persistent state machine
 aad93dfb69 airoha: add logical PON service interface for IPTV
@@ -296,7 +299,6 @@ a63074b320 toolchain/musl: parenthesize bswap helpers for -Werror
 7ae37b6042 airoha: add FiberHome HG5582A PON, voice and OEM IPTV data path
 ```
 
-本次清理把 voice 依赖修正和 HG5582A multi-profile 配置修正合并成一个提交。
 
 `feeds/pon_drivers`：
 
