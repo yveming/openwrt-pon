@@ -228,7 +228,7 @@ ONU 页面也不会拉入 PBX。
 ```text
 bin/targets/airoha/an7581/ponwrt-airoha-an7581-fiberhome_hg5582a-squashfs-sysupgrade.itb
 size:   20 MiB
-sha256: 3ed8bdd9941cac6fd059e9d3d0adfcc2dc8c94c15360946645fa5a10691dbedd
+sha256: 3bbbb523387a82311940070e3324e97fd469d9f05636addcd7d50482c0103196
 ```
 
 ```text
@@ -257,7 +257,7 @@ kmod-airoha-en7581-pcm-spi 6.18.55.2026.09.24~4222576d-r28
 
 ## 8. 变更规模
 
-- 顶层 OpenWrt：17 个受跟踪文件，约 +1082 / -8（不含本 `changes.log`；它本身是新增的第 18 个文件）。
+- 顶层 OpenWrt：18 个受跟踪文件，约 +1100 / -8（不含本 `changes.log`；它本身是新增的第 19 个文件）。
 - `feeds/pon_drivers`：9 个文件，约 +501 / -3。
 - `feeds/pon_feed`：13 个文件（含新增 RTSP 包、H.248 包、Le9642 u-law patch）。
 - `feeds/onu_config`：41 个文件（相对 `/home/ming/openwrt-pon/feeds/onu_config`，含 2 个预编译二进制）。
@@ -522,3 +522,41 @@ choice，`CONFIG_TARGET_MULTI_PROFILE` 是同一个 choice 的另一个选项。
 只把目标设备的 CONFIG_TARGET_DEVICE_...=y 打开，其他设备关掉
 不要设置 CONFIG_TARGET_airoha_an7581_DEVICE_*（那是单 profile 的 choice）
 ```
+
+
+---
+
+## 16. HG5582A 与 HG5382A U-Boot 的兼容
+
+HG5382A 的 U-Boot Web recovery 在写 FIT 前只检查镜像 FDT 的**第一个**
+compatible 字符串。5382A U-Boot 的 DTB 只有
+`fiberhome,hg5382a`，没有 `fiberhome,hg5582a`，所以 5582A 镜像会被拒绝：
+
+```text
+Firmware target 'fiberhome,hg5582a' does not match this board.
+```
+
+处理方式：
+
+- `an7581-fiberhome-hg5582a.dts` 的 compatible 顺序改为：
+
+  ```dts
+  compatible = "fiberhome,hg5382a", "fiberhome,hg5582a",
+               "airoha,an7581", "airoha,en7581";
+  ```
+
+  这样 5382A U-Boot 的第一个字符串校验能通过，镜像不再需要改 U-Boot。
+
+- 新增 `target/linux/airoha/base-files/lib/preinit/05_fiberhome_board_name`：
+  如果 `/proc/device-tree/compatible` 里同时存在 `fiberhome,hg5582a`，就把
+  `/tmp/sysinfo/board_name` 恢复为 `fiberhome,hg5582a`，避免 OpenWrt
+  把 5582A 当成 5382A。
+
+- 5382A U-Boot 只启用了 `&gdm1`（内部交换），没有 `gdm4`，也没有
+  MaxLinear/GPY211 PHY 驱动。因此 Web recovery / 刷机必须接
+  LAN2/LAN3/LAN4 这些 1G 口；LAN1 是 2.5G GPY211，在 U-Boot 阶段不会
+  链路起来。OpenWrt 启动后 LAN1 由内核 `kmod-phy-maxlinear` + `gdm4`
+  正常驱动。
+
+后续如果希望 U-Boot recovery 也走 2.5G 口，需要单独给 U-Boot 增加
+`gdm4` 节点和 GPY211/通用 C45 PHY 驱动；这不影响当前 5582A 系统镜像。

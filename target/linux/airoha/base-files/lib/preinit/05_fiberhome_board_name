@@ -1,0 +1,11 @@
+#!/bin/sh
+# HG5582A images keep "fiberhome,hg5382a" as the first compatible string so
+# the stock HG5382A U-Boot accepts the FIT.  Restore the real board identity
+# before board.d runs; 02_sysinfo() has already written the first string.
+set_fiberhome_board_name() {
+	[ -e /tmp/sysinfo/board_name ] || return
+	strings /proc/device-tree/compatible | grep -qx 'fiberhome,hg5582a' || return
+	echo 'fiberhome,hg5582a' >/tmp/sysinfo/board_name
+}
+
+boot_hook_add preinit_main set_fiberhome_board_name

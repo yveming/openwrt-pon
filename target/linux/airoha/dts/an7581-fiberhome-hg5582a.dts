@@ -20,7 +20,14 @@
 
 / {
 	model = "FiberHome HG5582A";
-	compatible = "fiberhome,hg5582a", "airoha,an7581", "airoha,en7581";
+	/*
+	 * The stock HG5382A U-Boot validates the first compatible string before
+	 * accepting a firmware FIT.  Keep the hg5382a alias first so that stock
+	 * recovery accepts this image; hg5582a remains in the list and preinit
+	 * restores the real board_name.
+	 */
+	compatible = "fiberhome,hg5382a", "fiberhome,hg5582a",
+		     "airoha,an7581", "airoha,en7581";
 
 	aliases {
 		/* OpenWrt diag state controls the power LED. */
