@@ -451,6 +451,7 @@ define Device/nokia_xg-040g-md-common
 	kmod-phy-airoha-en8811h kmod-regulator-userspace-consumer \
 	kmod-usb-ledtrig-usbport kmod-usb3 automount kmod-airoha-en7572 \
 	kmod-airoha-xpon airoha-ponctl airoha-pond \
+	kmod-iptv luci-proto-iptv \
 	$(AIROHA_USB_STORAGE_PACKAGES)
 endef
 
