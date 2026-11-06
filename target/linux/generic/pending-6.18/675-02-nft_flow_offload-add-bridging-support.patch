@@ -155,13 +155,14 @@ Signed-off-by: Yanghan Ye <yyh94306@gmail.com>
  			if (is_zero_ether_addr(info->h_source))
  				memcpy(info->h_source, path->dev->dev_addr, ETH_ALEN);
  
-@@ -161,9 +221,8 @@ static int nft_dev_path_info(const struct net_device_path_stack *stack,
+@@ -218,10 +278,8 @@ static int nft_dev_path_info(const struct net_device_path_stack *stack,
  				info->num_encaps++;
  				break;
  			case DEV_PATH_BR_VLAN_UNTAG:
--				if (WARN_ON_ONCE(info->num_encaps-- == 0))
+-				if (info->num_encaps == 0)
 -					return -1;
 -
+-				info->num_encaps--;
 +				if (info->num_encaps > 0)
 +					info->num_encaps--;
  				break;

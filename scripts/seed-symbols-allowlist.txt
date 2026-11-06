@@ -4,3 +4,6 @@
 # 例如上游改名/删除、或本产品故意保留的旧写法。不要用它掩盖"包被移出主树"这类真问题。
 #
 # 留空行为：脚本对未列出的丢失符号一律报错并返回非 0。
+# luci-theme-argon 3.0.0 起以 PKG_PROVIDES 提供 luci-app-argon-config，
+# 不再是独立可选包；功能已含在种子已选中的 luci-theme-argon 里。
+CONFIG_PACKAGE_luci-app-argon-config
