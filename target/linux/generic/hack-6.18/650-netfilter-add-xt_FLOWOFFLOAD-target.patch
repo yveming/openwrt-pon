@@ -465,6 +465,7 @@ Signed-off-by: Felix Fietkau <nbd@nbd.name>
 +
 +				break;
 +			case DEV_PATH_BR_VLAN_KEEP:
++			case DEV_PATH_BR_VLAN_KEEP_HW:
 +				break;
 +			}
 +			break;
