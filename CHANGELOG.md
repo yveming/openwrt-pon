@@ -27,6 +27,9 @@ ImmortalWrt 上游合并不逐项展开，仅记录会影响本设备构建或�
   trigger 始终注册。
 - `luci-app-iptv` 依赖改为 `+kmod-iptv`；`CONFIG_PACKAGE_iptv-scripts`
   符号取消。
+- 修复 `luci-i18n-iptv-zh-cn` 只装 uci-defaults、没有 `.lmo` 的问题：
+  thin package 在解析期展开 `$(wildcard ...)` 时上游 po 还没解包，改为
+  install 阶段 shell glob。
 - 上游 `yveming/openwrt-iptv` 同步调整，固定到 `ed62fbe`。
 
 ### Airoha NPU 状态页改用通用上游
