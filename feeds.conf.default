@@ -13,3 +13,6 @@ src-git pon_userspace https://github.com/pbs05/openwrt-pon-userspace.git
 
 # PonWrt 外置包（官方基座没有的包集中在这里）
 src-git pon_feed https://github.com/yveming/openwrt-pon-feed.git
+
+# IPTV 驱动与脚本（kmod-iptv / iptv-scripts / luci-app-iptv）
+src-git iptv https://github.com/yveming/openwrt-iptv.git
