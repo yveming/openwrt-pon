@@ -3,6 +3,20 @@
 本文件记录固件仓库的重要功能、稳定性和维护变更。常规的
 ImmortalWrt 上游合并不逐项展开，仅记录会影响本设备构建或运行行为的内容。
 
+## 2026-11-08
+
+### feed 与包结构整理
+
+- `pon_feed` 只保留打包 Makefile 和本地补丁：`airoha-voice`、
+  `asterisk-chan-en75xx`、`nf-nathelper-fcc`、`iptv`（thin packages）。
+- `nf-nathelper-fcc`、`iptv` 改为 `PKG_SOURCE` 引用上游，源码不再复制进 feed。
+- `airoha-voice` / `asterisk-chan-en75xx` 共用一个 `airoha_voip` 源码 tar 包。
+- LuCI Airoha 应用改走 `naoki66/luci-app-airoha` feed；`clientstatus` 系列删除。
+- `luci-app-mlo`、`airoha-an7581-mt7996-board`、`znxt-zn515-mt7916-eeprom`
+  回到主树 `package/`（产品树自带、没有独立上游）。
+- 移除 `onu_config` feed；语音配置改为需要时手动 clone。
+- 移除 `luci-theme-glass` feed。
+
 ## 2026-11-03
 
 ### 修好种子校验脚本的两个盲点，并清理由此暴露的种子残留

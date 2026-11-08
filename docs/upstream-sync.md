@@ -34,8 +34,13 @@ naoki66    naoki66/ImmortalWrt-for-Gemtek-brightspeed          只读，XR1710G 
 | L0 | 官方基座 | `master` | 不碰 |
 | L1 | 内核/网络补丁 | `target/linux/*/patches-*`、`generic/{pending,hack}-*` | **只增不改**：上游补丁文件只读，我们的改动一律新增补丁号 |
 | L2 | 产品树 | `target/linux/airoha/{dts,an7581,an7583,base-files,image,files-6.18}`、`configs/` | 新增文件零冲突；改上游文件尽量走 `files/` overlay 或 patch |
-| L3 | 外置软件包 | **`openwrt-pon-feed`** | 官方基座没有的包一律外置；主树不留供应商包 |
+| L3 | 外置软件包 | **`openwrt-pon-feed`** + 独立上游 feed | 有独立上游 repo/feed 的包外置；产品树自带、没有独立上游的包（如 `luci-app-mlo`、`airoha-an7581-mt7996-board`、`znxt-zn515-mt7916-eeprom`）留在主树 `package/` |
 | L4 | 自留地 | `.github/`、`scripts/`、`docs/`、`CHANGELOG.md`、`feeds.conf.default`、`include/feed-patches.mk`、`patches/feeds/` | 我们自有，随产品演进 |
+
+> 产品树自带的包不强行外置。`luci-app-mlo`、`airoha-an7581-mt7996-board`、
+> `znxt-zn515-mt7916-eeprom` 来自 naoki66 的完整树，没有独立 repo/feed，
+> 因此保留在主树 `package/`；有独立上游的 LuCI 应用走
+> `naoki66/luci-app-airoha` feed。
 
 ## 同步流程
 
