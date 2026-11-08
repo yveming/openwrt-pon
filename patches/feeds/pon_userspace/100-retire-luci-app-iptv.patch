@@ -1,0 +1,586 @@
+diff --git a/luci-app-iptv/Makefile b/luci-app-iptv/Makefile
+deleted file mode 100644
+index a38df2d..0000000
+--- a/luci-app-iptv/Makefile
++++ /dev/null
+@@ -1,16 +0,0 @@
+-# SPDX-License-Identifier: Apache-2.0
+-
+-include $(TOPDIR)/rules.mk
+-
+-LUCI_TITLE:=LuCI IPTV bridge configuration
+-LUCI_URL:=https://github.com/pbs05/openwrt-pon-userspace/tree/main/luci-app-iptv
+-LUCI_DEPENDS:=+luci-base +firewall4 +kmod-nft-bridge
+-LUCI_PKGARCH:=all
+-
+-PKG_VERSION:=0.1.0
+-PKG_RELEASE:=1
+-PKG_LICENSE:=Apache-2.0
+-
+-include $(TOPDIR)/feeds/luci/luci.mk
+-
+-# call BuildPackage: feed scanner marker; luci.mk generates the package rules.
+diff --git a/luci-app-iptv/htdocs/luci-static/resources/view/iptv/config.js b/luci-app-iptv/htdocs/luci-static/resources/view/iptv/config.js
+deleted file mode 100644
+index 278c5d8..0000000
+--- a/luci-app-iptv/htdocs/luci-static/resources/view/iptv/config.js
++++ /dev/null
+@@ -1,90 +0,0 @@
+-// SPDX-License-Identifier: Apache-2.0
+-
+-'use strict';
+-'require form';
+-'require network';
+-'require uci';
+-'require view';
+-
+-function validateIfname(sectionId, value) {
+-	if (!/^[A-Za-z0-9_.:-]{1,15}$/.test(value || ''))
+-		return _('Use a Linux network device name containing at most 15 characters.');
+-
+-	return true;
+-}
+-
+-return view.extend({
+-	load: function() {
+-		return network.getDevices();
+-	},
+-
+-	render: function(devices) {
+-		var m, s, o, currentPort, lanPorts;
+-
+-		m = new form.Map('iptv', _('IPTV'),
+-			_('Bind one LAN port to the operator IPTV VLAN. Applying the configuration removes the selected port from br-lan.'));
+-
+-		s = m.section(form.NamedSection, 'config', 'iptv');
+-		s.anonymous = true;
+-		s.addremove = false;
+-
+-		o = s.option(form.Flag, 'enabled', _('Enable'));
+-		o.default = '0';
+-		o.rmempty = false;
+-
+-		currentPort = uci.get('iptv', 'config', 'lan_port');
+-		lanPorts = devices.map(function(device) {
+-			return device.getName();
+-		}).filter(function(name) {
+-			return /^lan[0-9]+$/.test(name);
+-		}).sort();
+-
+-		o = s.option(form.ListValue, 'lan_port', _('IPTV LAN port'),
+-			_('The selected port is dedicated to the set-top box.'));
+-		o.rmempty = false;
+-		lanPorts.forEach(function(name) {
+-			o.value(name);
+-		});
+-		if (currentPort && lanPorts.indexOf(currentPort) < 0)
+-			o.value(currentPort);
+-		o.depends('enabled', '1');
+-
+-		o = s.option(form.Value, 'uplink', _('Uplink device'),
+-			_('Network device carrying the operator VLANs, normally pon0.'));
+-		o.default = 'pon0';
+-		o.rmempty = false;
+-		o.validate = validateIfname;
+-		o.depends('enabled', '1');
+-
+-		o = s.option(form.Value, 'service_vlan', _('Service VLAN'),
+-			_('Carries DHCP, authentication, video on demand and, when no separate multicast VLAN is set, multicast traffic.'));
+-		o.placeholder = '43';
+-		o.datatype = 'range(1,4094)';
+-		o.rmempty = false;
+-		o.depends('enabled', '1');
+-
+-		o = s.option(form.Value, 'multicast_vlan', _('Multicast VLAN'),
+-			_('Optional. In separate multicast VLAN mode, IPv4 multicast flows downstream and IGMP is allowed upstream.'));
+-		o.placeholder = '40';
+-		o.datatype = 'range(1,4094)';
+-		o.rmempty = true;
+-		o.depends('enabled', '1');
+-		o.validate = function(sectionId, value) {
+-			var serviceVlan = this.section.formvalue(sectionId, 'service_vlan');
+-
+-			if (value && value === serviceVlan)
+-				return _('Leave the multicast VLAN empty when both services use the same VLAN.');
+-
+-			return true;
+-		};
+-
+-		o = s.option(form.Value, 'igmp_vlan', _('IGMP upstream VLAN'),
+-			_('Optional. Leave empty to use the multicast VLAN, or the service VLAN when no separate multicast VLAN is configured.'));
+-		o.placeholder = _('Same as multicast traffic');
+-		o.datatype = 'range(1,4094)';
+-		o.rmempty = true;
+-		o.depends('enabled', '1');
+-
+-		return m.render();
+-	}
+-});
+diff --git a/luci-app-iptv/po/zh_Hans/iptv.po b/luci-app-iptv/po/zh_Hans/iptv.po
+deleted file mode 100644
+index f63e7b6..0000000
+--- a/luci-app-iptv/po/zh_Hans/iptv.po
++++ /dev/null
+@@ -1,59 +0,0 @@
+-msgid ""
+-msgstr ""
+-"Project-Id-Version: luci-app-iptv\n"
+-"PO-Revision-Date: 2026-08-27 12:00+0800\n"
+-"Last-Translator: OpenWrt LuCI community\n"
+-"Language: zh_Hans\n"
+-"Language-Team: Chinese (Simplified)\n"
+-"MIME-Version: 1.0\n"
+-"Content-Type: text/plain; charset=UTF-8\n"
+-"Content-Transfer-Encoding: 8bit\n"
+-"Plural-Forms: nplurals=1; plural=0;\n"
+-
+-msgid "Bind one LAN port to the operator IPTV VLAN. Applying the configuration removes the selected port from br-lan."
+-msgstr "将一个 LAN 口绑定到运营商 IPTV VLAN。应用配置时会把所选端口移出 br-lan。"
+-
+-msgid "Carries DHCP, authentication, video on demand and, when no separate multicast VLAN is set, multicast traffic."
+-msgstr "承载 DHCP、鉴权和点播；未设置独立组播 VLAN 时也承载组播流量。"
+-
+-msgid "Enable"
+-msgstr "启用"
+-
+-msgid "Grant access to IPTV bridge configuration"
+-msgstr "允许访问 IPTV 网桥配置"
+-
+-msgid "IPTV LAN port"
+-msgstr "IPTV LAN 口"
+-
+-msgid "Leave the multicast VLAN empty when both services use the same VLAN."
+-msgstr "两种业务共用同一 VLAN 时，请将组播 VLAN 留空。"
+-
+-msgid "Multicast VLAN"
+-msgstr "组播 VLAN"
+-
+-msgid "Network device carrying the operator VLANs, normally pon0."
+-msgstr "承载运营商 VLAN 的网络设备，通常为 pon0。"
+-
+-msgid "Optional. In separate multicast VLAN mode, IPv4 multicast flows downstream and IGMP is allowed upstream."
+-msgstr "可选。使用独立组播 VLAN 时，IPv4 组播向机顶盒下行，并允许 IGMP 上行。"
+-
+-msgid "Service VLAN"
+-msgstr "业务 VLAN"
+-
+-msgid "The selected port is dedicated to the set-top box."
+-msgstr "所选端口将专用于机顶盒。"
+-
+-msgid "Uplink device"
+-msgstr "上联设备"
+-
+-msgid "Use a Linux network device name containing at most 15 characters."
+-msgstr "请输入不超过 15 个字符的 Linux 网络设备名称。"
+-
+-msgid "IGMP upstream VLAN"
+-msgstr "IGMP 上行 VLAN"
+-
+-msgid "Optional. Leave empty to use the multicast VLAN, or the service VLAN when no separate multicast VLAN is configured."
+-msgstr "可选。留空时使用组播 VLAN；未设置独立组播 VLAN 时使用业务 VLAN。"
+-
+-msgid "Same as multicast traffic"
+-msgstr "与组播流量相同"
+diff --git a/luci-app-iptv/root/etc/config/iptv b/luci-app-iptv/root/etc/config/iptv
+deleted file mode 100644
+index 24b99c9..0000000
+--- a/luci-app-iptv/root/etc/config/iptv
++++ /dev/null
+@@ -1,7 +0,0 @@
+-config iptv 'config'
+-	option enabled '0'
+-	option lan_port ''
+-	option uplink 'pon0'
+-	option service_vlan ''
+-	option multicast_vlan ''
+-	option igmp_vlan ''
+diff --git a/luci-app-iptv/root/etc/init.d/iptv b/luci-app-iptv/root/etc/init.d/iptv
+deleted file mode 100755
+index 56d7acf..0000000
+--- a/luci-app-iptv/root/etc/init.d/iptv
++++ /dev/null
+@@ -1,18 +0,0 @@
+-#!/bin/sh /etc/rc.common
+-# SPDX-License-Identifier: Apache-2.0
+-
+-START=19
+-USE_PROCD=1
+-
+-start_service() {
+-	# Boot ordering lets network and firewall consume the generated configuration.
+-	/usr/libexec/iptv-apply boot
+-}
+-
+-reload_service() {
+-	/usr/libexec/iptv-apply reload
+-}
+-
+-service_triggers() {
+-	procd_add_reload_trigger "iptv"
+-}
+diff --git a/luci-app-iptv/root/usr/libexec/iptv-apply b/luci-app-iptv/root/usr/libexec/iptv-apply
+deleted file mode 100755
+index 59c53f2..0000000
+--- a/luci-app-iptv/root/usr/libexec/iptv-apply
++++ /dev/null
+@@ -1,319 +0,0 @@
+-#!/bin/sh
+-# SPDX-License-Identifier: Apache-2.0
+-
+-. /lib/functions.sh
+-
+-ACTION="${1:-reload}"
+-NFT_FILE="/etc/iptv.nft"
+-
+-fail() {
+-	logger -t iptv "$*"
+-	echo "iptv: $*" >&2
+-	exit 1
+-}
+-
+-validate_ifname() {
+-	local name="$1"
+-
+-	[ -n "$name" ] || return 1
+-	[ "${#name}" -le 15 ] || return 1
+-
+-	case "$name" in
+-		*[!A-Za-z0-9_.:-]*) return 1 ;;
+-	esac
+-
+-	return 0
+-}
+-
+-validate_vlan() {
+-	local vid="$1"
+-
+-	case "$vid" in
+-		''|*[!0-9]*) return 1 ;;
+-	esac
+-
+-	[ "$vid" -ge 1 ] && [ "$vid" -le 4094 ]
+-}
+-
+-load_iptv_config() {
+-	config_load iptv
+-	config_get_bool ENABLED config enabled 0
+-	config_get LAN_PORT config lan_port
+-	config_get UPLINK config uplink pon0
+-	config_get SERVICE_VLAN config service_vlan
+-	config_get MULTICAST_VLAN config multicast_vlan
+-	config_get IGMP_VLAN config igmp_vlan
+-}
+-
+-find_br_lan() {
+-	local section="$1"
+-	local name
+-
+-	config_get name "$section" name
+-	[ "$name" = "br-lan" ] && BR_LAN_SECTION="$section"
+-}
+-
+-find_old_iptv_port() {
+-	local port
+-	local ports
+-
+-	config_get ports luci_iptv_bridge ports
+-	for port in $ports; do
+-		case "$port" in
+-			ct-iptv-svc|ct-iptv-mc|ct-iptv-igmp) ;;
+-			*) OLD_LAN_PORT="$port" ;;
+-		esac
+-	done
+-}
+-
+-detach_from_device() {
+-	local section="$1"
+-	local ports port
+-
+-	config_get ports "$section" ports
+-	for port in $ports; do
+-		[ "$port" = "$LAN_PORT" ] && uci -q del_list "network.$section.ports=$port"
+-	done
+-}
+-
+-detach_from_interface() {
+-	local section="$1"
+-	local device ifnames ifname
+-
+-	[ "$section" = "luci_iptv" ] && return
+-
+-	config_get device "$section" device
+-	config_get ifnames "$section" ifname
+-	[ "$device" = "$LAN_PORT" ] && uci -q delete "network.$section.device"
+-
+-	for ifname in $ifnames; do
+-		[ "$ifname" = "$LAN_PORT" ] || continue
+-		uci -q del_list "network.$section.ifname=$ifname" || uci -q delete "network.$section.ifname"
+-	done
+-}
+-
+-detach_from_bridge_vlan() {
+-	local section="$1"
+-	local ports token base
+-
+-	config_get ports "$section" ports
+-	for token in $ports; do
+-		base="${token%%:*}"
+-		[ "$base" = "$LAN_PORT" ] && uci -q del_list "network.$section.ports=$token"
+-	done
+-}
+-
+-validate_config() {
+-	[ "$ENABLED" -eq 1 ] || return 0
+-
+-	validate_ifname "$LAN_PORT" || fail "Invalid LAN port name"
+-	validate_ifname "$UPLINK" || fail "Invalid uplink device name"
+-	[ "$LAN_PORT" != "$UPLINK" ] || fail "The LAN port and uplink must be different devices"
+-	validate_vlan "$SERVICE_VLAN" || fail "Service VLAN must be between 1 and 4094"
+-
+-	if [ -n "$MULTICAST_VLAN" ]; then
+-		validate_vlan "$MULTICAST_VLAN" || fail "Multicast VLAN must be between 1 and 4094"
+-		[ "$MULTICAST_VLAN" != "$SERVICE_VLAN" ] || fail "Leave the multicast VLAN empty when it matches the service VLAN"
+-	fi
+-	[ -z "$IGMP_VLAN" ] || validate_vlan "$IGMP_VLAN" || fail "IGMP upstream VLAN must be between 1 and 4094"
+-
+-	[ -e "/sys/class/net/$LAN_PORT" ] || fail "LAN port $LAN_PORT was not found"
+-	[ -e "/sys/class/net/$UPLINK" ] || fail "Uplink device $UPLINK was not found"
+-}
+-
+-resolve_igmp_port() {
+-	IGMP_PORT='ct-iptv-svc'
+-	[ -n "$MULTICAST_VLAN" ] && IGMP_PORT='ct-iptv-mc'
+-
+-	[ -n "$IGMP_VLAN" ] || return
+-	if [ "$IGMP_VLAN" = "$SERVICE_VLAN" ]; then
+-		IGMP_PORT='ct-iptv-svc'
+-	elif [ -n "$MULTICAST_VLAN" ] && [ "$IGMP_VLAN" = "$MULTICAST_VLAN" ]; then
+-		IGMP_PORT='ct-iptv-mc'
+-	else
+-		IGMP_PORT='ct-iptv-igmp'
+-	fi
+-}
+-
+-write_nft_rules() {
+-	local tmp
+-
+-	tmp="$(mktemp /etc/iptv.nft.XXXXXX)" || fail "Cannot create nftables staging file"
+-
+-	if [ "$ENABLED" -ne 1 ]; then
+-		cat >"$tmp" <<'EOF'
+-# IPTV bridge inactive.
+-EOF
+-	else
+-		cat >"$tmp" <<EOF
+-# Flush the table so repeated firewall reloads use the current rules.
+-table bridge iptv
+-flush table bridge iptv
+-
+-table bridge iptv {
+-	chain iptv_forward {
+-		# The service VLAN carries two-way STB signaling and unicast traffic.
+-		iifname "$LAN_PORT" oifname "ct-iptv-svc" counter accept
+-		iifname "ct-iptv-svc" oifname "$LAN_PORT" counter accept
+-EOF
+-		if [ -n "$MULTICAST_VLAN" ]; then
+-			cat >>"$tmp" <<EOF
+-		# The multicast VLAN carries downstream IPv4 multicast to the STB.
+-		iifname "ct-iptv-mc" oifname "$LAN_PORT" \
+-			ether type ip ip daddr 224.0.0.0/4 counter accept
+-		iifname "ct-iptv-svc" oifname "ct-iptv-mc" \
+-			counter drop comment "block-service-to-multicast"
+-		iifname "ct-iptv-mc" oifname "ct-iptv-svc" \
+-			counter drop comment "block-multicast-to-service"
+-EOF
+-		fi
+-		if [ "$IGMP_PORT" != 'ct-iptv-svc' ]; then
+-			cat >>"$tmp" <<EOF
+-		# IGMP Join/Leave follows the OLT-selected upstream VLAN and its GEM.
+-		iifname "$LAN_PORT" oifname "$IGMP_PORT" \
+-			ether type ip ip protocol igmp counter accept comment "allow-stb-igmp"
+-		iifname "$LAN_PORT" oifname "$IGMP_PORT" \
+-			counter drop comment "block-stb-data-to-igmp-vlan"
+-EOF
+-		fi
+-
+-		cat >>"$tmp" <<'EOF'
+-		counter drop comment "drop-other-iptv-bridge-traffic"
+-	}
+-
+-	chain forward {
+-		type filter hook forward priority filter; policy accept;
+-
+-		# The bridge hook sees every bridge; this match scopes the service filter.
+-		meta ibrname "br-iptv" jump iptv_forward
+-	}
+-}
+-EOF
+-	fi
+-
+-	if ! nft -c -f "$tmp" >/dev/null 2>&1; then
+-		rm -f "$tmp"
+-		fail "Generated nftables rules failed validation"
+-	fi
+-
+-	chmod 0644 "$tmp"
+-	mv -f "$tmp" "$NFT_FILE"
+-}
+-
+-restore_old_lan_port() {
+-	[ -n "$OLD_LAN_PORT" ] || return
+-	[ -n "$BR_LAN_SECTION" ] || return
+-
+-	uci -q del_list "network.$BR_LAN_SECTION.ports=$OLD_LAN_PORT"
+-	uci -q add_list "network.$BR_LAN_SECTION.ports=$OLD_LAN_PORT"
+-}
+-
+-remove_selected_port_from_br_lan() {
+-	[ -n "$BR_LAN_SECTION" ] || return
+-	uci -q del_list "network.$BR_LAN_SECTION.ports=$LAN_PORT"
+-}
+-
+-remove_managed_network() {
+-	uci -q delete network.luci_iptv
+-	uci -q delete network.luci_iptv_bridge
+-	uci -q delete network.luci_iptv_service_vlan
+-	uci -q delete network.luci_iptv_multicast_vlan
+-	uci -q delete network.luci_iptv_igmp_vlan
+-}
+-
+-write_network_config() {
+-	restore_old_lan_port
+-	remove_managed_network
+-
+-	if [ "$ENABLED" -eq 1 ]; then
+-		# A dedicated STB port needs exclusive netifd ownership.
+-		config_foreach detach_from_device device
+-		config_foreach detach_from_interface interface
+-		config_foreach detach_from_bridge_vlan bridge-vlan
+-		remove_selected_port_from_br_lan
+-
+-		uci set network.luci_iptv_service_vlan='device'
+-		uci set network.luci_iptv_service_vlan.type='8021q'
+-		uci set network.luci_iptv_service_vlan.ifname="$UPLINK"
+-		uci set network.luci_iptv_service_vlan.vid="$SERVICE_VLAN"
+-		uci set network.luci_iptv_service_vlan.name='ct-iptv-svc'
+-
+-		if [ -n "$MULTICAST_VLAN" ]; then
+-			uci set network.luci_iptv_multicast_vlan='device'
+-			uci set network.luci_iptv_multicast_vlan.type='8021q'
+-			uci set network.luci_iptv_multicast_vlan.ifname="$UPLINK"
+-			uci set network.luci_iptv_multicast_vlan.vid="$MULTICAST_VLAN"
+-			uci set network.luci_iptv_multicast_vlan.name='ct-iptv-mc'
+-		fi
+-
+-		if [ "$IGMP_PORT" = 'ct-iptv-igmp' ]; then
+-			uci set network.luci_iptv_igmp_vlan='device'
+-			uci set network.luci_iptv_igmp_vlan.type='8021q'
+-			uci set network.luci_iptv_igmp_vlan.ifname="$UPLINK"
+-			uci set network.luci_iptv_igmp_vlan.vid="$IGMP_VLAN"
+-			uci set network.luci_iptv_igmp_vlan.name='ct-iptv-igmp'
+-		fi
+-
+-		uci set network.luci_iptv_bridge='device'
+-		uci set network.luci_iptv_bridge.type='bridge'
+-		uci set network.luci_iptv_bridge.name='br-iptv'
+-		uci set network.luci_iptv_bridge.stp='0'
+-		# The service filter controls multicast forwarding for this bridge.
+-		uci set network.luci_iptv_bridge.igmp_snooping='0'
+-		uci add_list network.luci_iptv_bridge.ports="$LAN_PORT"
+-		uci add_list network.luci_iptv_bridge.ports='ct-iptv-svc'
+-		[ -n "$MULTICAST_VLAN" ] && uci add_list network.luci_iptv_bridge.ports='ct-iptv-mc'
+-		[ "$IGMP_PORT" = 'ct-iptv-igmp' ] && uci add_list network.luci_iptv_bridge.ports='ct-iptv-igmp'
+-
+-		uci set network.luci_iptv='interface'
+-		uci set network.luci_iptv.proto='none'
+-		uci set network.luci_iptv.device='br-iptv'
+-		uci set network.luci_iptv.auto='1'
+-		uci set network.luci_iptv.delegate='0'
+-	fi
+-
+-	uci commit network || fail "Cannot save network configuration"
+-}
+-
+-write_firewall_config() {
+-	uci set firewall.luci_iptv='include'
+-	uci set firewall.luci_iptv.type='nftables'
+-	uci set firewall.luci_iptv.position='ruleset-append'
+-	uci set firewall.luci_iptv.path="$NFT_FILE"
+-	uci set firewall.luci_iptv.enabled="$ENABLED"
+-	uci commit firewall || fail "Cannot save firewall configuration"
+-}
+-
+-reload_runtime() {
+-	[ "$ACTION" = "boot" ] && return 0
+-
+-	if [ "$ENABLED" -eq 1 ]; then
+-		# The bridge must be filtered from its first forwarded frame.
+-		/etc/init.d/firewall reload || fail "firewall4 reload failed"
+-		ubus call network reload >/dev/null || fail "netifd reload failed"
+-	else
+-		# The filter remains active throughout bridge teardown.
+-		ubus call network reload >/dev/null || fail "netifd reload failed"
+-		if nft list table bridge iptv >/dev/null 2>&1; then
+-			nft delete table bridge iptv || fail "Cannot delete IPTV filter table"
+-		fi
+-		/etc/init.d/firewall reload || fail "firewall4 reload failed"
+-	fi
+-}
+-
+-load_iptv_config
+-config_load network
+-BR_LAN_SECTION=""
+-OLD_LAN_PORT=""
+-config_foreach find_br_lan device
+-find_old_iptv_port
+-
+-validate_config
+-resolve_igmp_port
+-write_nft_rules
+-write_network_config
+-write_firewall_config
+-reload_runtime
+-
+-logger -t iptv "IPTV bridge configuration applied"
+-exit 0
+diff --git a/luci-app-iptv/root/usr/share/luci/menu.d/luci-app-iptv.json b/luci-app-iptv/root/usr/share/luci/menu.d/luci-app-iptv.json
+deleted file mode 100644
+index 8d14641..0000000
+--- a/luci-app-iptv/root/usr/share/luci/menu.d/luci-app-iptv.json
++++ /dev/null
+@@ -1,14 +0,0 @@
+-{
+-	"admin/network/iptv": {
+-		"title": "IPTV",
+-		"order": 86,
+-		"action": {
+-			"type": "view",
+-			"path": "iptv/config"
+-		},
+-		"depends": {
+-			"acl": [ "luci-app-iptv" ],
+-			"uci": { "iptv": true }
+-		}
+-	}
+-}
+diff --git a/luci-app-iptv/root/usr/share/rpcd/acl.d/luci-app-iptv.json b/luci-app-iptv/root/usr/share/rpcd/acl.d/luci-app-iptv.json
+deleted file mode 100644
+index e63f611..0000000
+--- a/luci-app-iptv/root/usr/share/rpcd/acl.d/luci-app-iptv.json
++++ /dev/null
+@@ -1,15 +0,0 @@
+-{
+-	"luci-app-iptv": {
+-		"description": "Grant access to IPTV bridge configuration",
+-		"read": {
+-			"uci": [ "iptv", "network" ],
+-			"ubus": {
+-				"network.device": [ "status" ],
+-				"network.interface": [ "dump" ]
+-			}
+-		},
+-		"write": {
+-			"uci": [ "iptv" ]
+-		}
+-	}
+-}
