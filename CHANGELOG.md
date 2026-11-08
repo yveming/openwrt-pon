@@ -17,6 +17,20 @@ ImmortalWrt 上游合并不逐项展开，仅记录会影响本设备构建或�
 - 移除 `onu_config` feed；语音配置改为需要时手动 clone。
 - 移除 `luci-theme-glass` feed。
 
+### pbs05 同步与 L1 补丁栈切换
+
+- 合并 `pbs05/master` `d9dd3a4`；bridge flowtable 从本地 7 补丁栈切到
+  pbs05/ImmortalWrt 的官方 `675-01..675-14` 系列，`650`/`915-01` 跟随刷新。
+- 保留本地 `922`（与 pbs05 的 922 功能等价，仅上下文适配）和 `310-10`
+  （已包含 `port->lock` 的 MIB stats 转换）；`310-11`/`310-12` 暂不加入。
+- `9999-12` 的 `thoff==0` 检查已由 `675-09` 吸收；`9999-11` 按新
+  `nft_flow_route()` API 重生成。
+- `928` 拆分：保留 pbs05 的 `928`（PPE bind rate），本地 UPDMEM 补丁改名 `929`；
+  新增 `999-mt7530-trap-frames-to-conduit`。
+- `firewall4` `PKG_RELEASE` `5 -> 6`。
+- 验证：`scripts/check-patch-stack.sh airoha` 783 个补丁全绿；
+  `make target/linux/compile` 通过。
+
 ## 2026-11-03
 
 ### 修好种子校验脚本的两个盲点，并清理由此暴露的种子残留
