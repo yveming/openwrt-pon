@@ -17,6 +17,17 @@ ImmortalWrt 上游合并不逐项展开，仅记录会影响本设备构建或�
 - 移除 `onu_config` feed；语音配置改为需要时手动 clone。
 - 移除 `luci-theme-glass` feed。
 
+### Airoha NPU 状态页改用通用上游
+
+- `luci-app-airoha-npu` 从 naoki66 的板级 `2.0.0-r9` 换成
+  `rchen14b/luci-app-airoha-npu` 的 `1.0.1`，修复 pbs05 XG2010G 等
+  非 Gemtek 板卡上的运行时错误。
+- 上游仓库不是 feed 布局，改在 `pon_feed` 里以 thin package 打包，固定
+  commit `14521b8`，构建时提取仓库根目录的 `htdocs/`、`root/`、`po/`。
+- 包名和 `CONFIG_PACKAGE_luci-app-airoha-npu` 符号不变；旧
+  `luci-i18n-airoha-npu-zh-cn` 翻译包随旧包移除。
+- 移除临时的 `arioha_npu` / `airoha_npu` src-git feed 条目。
+
 ### pbs05 同步与 L1 补丁栈切换
 
 - 合并 `pbs05/master` `d9dd3a4`；bridge flowtable 从本地 7 补丁栈切到
