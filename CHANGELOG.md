@@ -17,6 +17,18 @@ ImmortalWrt 上游合并不逐项展开，仅记录会影响本设备构建或�
 - 移除 `onu_config` feed；语音配置改为需要时手动 clone。
 - 移除 `luci-theme-glass` feed。
 
+### IPTV 驱动与配置合成一个包
+
+- `iptv-scripts` 并入 `kmod-iptv`：`kmod-iptv` 现在同时安装 `iptv.ko`、
+  `/etc/config/iptv`、`/etc/init.d/iptv` 和
+  `/etc/uci-defaults/30-iptv-stb-ignore`。
+- `/usr/libexec/iptv-apply` 删除，apply 逻辑合并进 `/etc/init.d/iptv`；
+  失败只记 `logger`（tag `iptv`）并返回，不再 `exit`，保证 procd reload
+  trigger 始终注册。
+- `luci-app-iptv` 依赖改为 `+kmod-iptv`；`CONFIG_PACKAGE_iptv-scripts`
+  符号取消。
+- 上游 `yveming/openwrt-iptv` 同步调整，固定到 `ed62fbe`。
+
 ### Airoha NPU 状态页改用通用上游
 
 - `luci-app-airoha-npu` 从 naoki66 的板级 `2.0.0-r9` 换成
