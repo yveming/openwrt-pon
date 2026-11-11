@@ -45,6 +45,7 @@ an7581_setup_interfaces()
 		ucidef_set_interfaces_lan_wan "lan1 lan2 lan3 lan4" "pon0"
 		;;
 	fiberhome,hg5382a|\
+	fiberhome,hg5582a|\
 	fiberhome,hg5585f-ct)
 		case "$VARIANT" in
 			usb-sfp)

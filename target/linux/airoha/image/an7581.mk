@@ -273,6 +273,43 @@ define Device/fiberhome_hg5382a
 endef
 TARGET_DEVICES += fiberhome_hg5382a
 
+# HG5582A is the single-FXS, WiFi/USB-less variant of the HG5382A family.
+# It reuses the HG5382A U-Boot; the DTS keeps hg5382a as the first compatible
+# string so that stock recovery accepts the FIT, while preinit restores the
+# real hg5582a board name.
+define Device/fiberhome_hg5582a
+  $(call Device/FitImageLzma)
+  DEVICE_VENDOR := FiberHome
+  DEVICE_MODEL := HG5582A
+  DEVICE_DTS := an7581-fiberhome-hg5582a
+  SUPPORTED_DEVICES += fiberhome,hg5582a
+  KERNEL_LOADADDR := 0x8c000000
+  BLOCKSIZE := 128k
+  PAGESIZE := 2048
+  UBOOTENV_IN_UBI := 1
+  KERNEL_IN_UBI := 1
+  KERNEL := kernel-bin | gzip
+  KERNEL_INITRAMFS := kernel-bin | lzma | \
+	fit lzma $$(KDIR)/image-$$(DEVICE_DTS).dtb with-initrd | pad-to 128k
+  KERNEL_INITRAMFS_SUFFIX := -recovery.itb
+  IMAGES := sysupgrade.itb
+  IMAGE/sysupgrade.itb := append-kernel | \
+	fit gzip $$(KDIR)/image-$$(DEVICE_DTS).dtb external-static-with-rootfs | \
+	append-metadata
+  DEVICE_PACKAGES := kmod-gpio-button-hotplug kmod-leds-gpio kmod-phy-maxlinear \
+    kmod-airoha-paged-bosa kmod-airoha-xpon airoha-ponctl airoha-pond \
+    luci-app-omcproxy luci-i18n-omcproxy-zh-cn luci-theme-argon \
+    kmod-nf-nathelper-fcc \
+    kmod-an7581-zsi kmod-an7581-pcm kmod-an7581-slic-le9641 \
+    asterisk asterisk-chan-an7581 asterisk-app-stack asterisk-app-verbose \
+    asterisk-func-volume asterisk-app-read asterisk-app-waituntil asterisk-app-senddtmf \
+    kmod-iptv luci-app-iptv luci-i18n-iptv-zh-cn \
+    luci-app-voice luci-i18n-voice-zh-cn \
+    airoha-pon-debug luci-app-pon luci-i18n-pon-zh-cn \
+    fitblk nand-utils ubi-utils
+endef
+TARGET_DEVICES += fiberhome_hg5582a
+
 # HG5585F variants share parallel NAND, PON, MT7916D, and dual USB.
 define Device/fiberhome_hg5585f-common
   $(call Device/FitImageLzma)
