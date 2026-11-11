@@ -299,13 +299,17 @@ define Device/fiberhome_hg5582a
   DEVICE_PACKAGES := kmod-gpio-button-hotplug kmod-leds-gpio kmod-phy-maxlinear \
     kmod-airoha-paged-bosa kmod-airoha-xpon airoha-ponctl airoha-pond \
     luci-app-omcproxy luci-i18n-omcproxy-zh-cn luci-theme-argon \
-    kmod-nf-nathelper-fcc \
+    kmod-nf-nathelper-fcc kmod-nf-nathelper-rtsp \
     kmod-an7581-zsi kmod-an7581-pcm kmod-an7581-slic-le9641 \
     asterisk asterisk-chan-an7581 asterisk-app-stack asterisk-app-verbose \
     asterisk-func-volume asterisk-app-read asterisk-app-waituntil asterisk-app-senddtmf \
+    asterisk-app-playtones asterisk-app-record asterisk-bridge-simple \
+    asterisk-codec-alaw asterisk-codec-g722 asterisk-codec-ulaw \
+    asterisk-format-wav asterisk-res-musiconhold asterisk-res-rtp-asterisk \
+    asterisk-sounds \
     kmod-iptv luci-app-iptv luci-i18n-iptv-zh-cn \
     luci-app-voice luci-i18n-voice-zh-cn \
-    airoha-pon-debug luci-app-pon luci-i18n-pon-zh-cn \
+    airoha-pon-debug luci-app-pon luci-i18n-pon-zh-cn luci-app-airoha-npu \
     fitblk nand-utils ubi-utils
 endef
 TARGET_DEVICES += fiberhome_hg5582a
