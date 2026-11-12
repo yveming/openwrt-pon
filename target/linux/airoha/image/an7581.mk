@@ -308,7 +308,7 @@ define Device/fiberhome_hg5582a
     asterisk-format-wav asterisk-res-musiconhold asterisk-res-rtp-asterisk \
     asterisk-sounds \
     kmod-iptv luci-app-iptv luci-i18n-iptv-zh-cn \
-    luci-app-voice luci-i18n-voice-zh-cn \
+    luci-app-voip luci-i18n-voip-zh-cn \
     airoha-pon-debug luci-app-pon luci-i18n-pon-zh-cn luci-app-airoha-npu \
     fitblk nand-utils ubi-utils
 endef
