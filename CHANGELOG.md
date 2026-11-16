@@ -16,9 +16,9 @@ ImmortalWrt 上游合并不逐项展开，仅记录会影响本设备构建或�
   默认保持 `mcast`，这类运营商改为 `service`。
 - 只匹配 IPv4 IGMP 和 IPv6 MLD（130/131/132/143）；其他 IPv4/IPv6
   组播（含 NDP）仍走组播 VLAN。
-- `luci-app-iptv` 版本提升到 `0.2.0-r1`，`kmod-iptv` 包 release 升到 `3`。
-- 驱动与 LuCI 改动以 `yveming/openwrt-iptv@3f128ee` 为基线，维护在
-  `feeds/pon_feed/iptv/{kernel,luci}/.../patches/`。
+- `luci-app-iptv` 版本提升到 `0.2.0-r1`，`kmod-iptv` 包 release 保持 `2`。
+- 上游仓库 `yveming/iptv-nd` 已直接包含驱动/LuCI 改动（commit `0001c0f`），
+  `pon_feed` 只固定 tarball，不再维护本地补丁。
 
 ## 2026-11-08
 
@@ -47,7 +47,7 @@ ImmortalWrt 上游合并不逐项展开，仅记录会影响本设备构建或�
 - 修复 `luci-i18n-iptv-zh-cn` 只装 uci-defaults、没有 `.lmo` 的问题：
   thin package 在解析期展开 `$(wildcard ...)` 时上游 po 还没解包，改为
   install 阶段 shell glob。
-- 上游 `yveming/openwrt-iptv` 同步调整，固定到 `ed62fbe`。
+- 上游 `yveming/iptv-nd` 同步调整，固定到 `ed62fbe`。
 
 ### Airoha NPU 状态页改用通用上游
 
