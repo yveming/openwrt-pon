@@ -3,6 +3,23 @@
 本文件记录固件仓库的重要功能、稳定性和维护变更。常规的
 ImmortalWrt 上游合并不逐项展开，仅记录会影响本设备构建或运行行为的内容。
 
+## 2026-11-16
+
+### IPTV 组播控制报文 VLAN 可选
+
+- `kmod-iptv` 新增 `igmp_on_service` sysfs 开关，`luci-app-iptv` 新增
+  “组播控制报文 VLAN”选项，对应 `/etc/config/iptv` 的 `igmp_vid`
+  （`mcast` / `service`）。
+- IGMP/MLD 控制报文不再强制使用 `mcast_vid`。少数运营商的组播 VLAN
+  只下行，IGMP 走业务 VLAN；旧逻辑在 `pon0` 上行没有对应 flow，
+  `tx_no_mapping` 丢包，表现为 IPTV 认证/VOD 正常但直播黑屏。
+  默认保持 `mcast`，这类运营商改为 `service`。
+- 只匹配 IPv4 IGMP 和 IPv6 MLD（130/131/132/143）；其他 IPv4/IPv6
+  组播（含 NDP）仍走组播 VLAN。
+- `luci-app-iptv` 版本提升到 `0.2.0-r1`，`kmod-iptv` 包 release 升到 `3`。
+- 驱动与 LuCI 改动以 `yveming/openwrt-iptv@3f128ee` 为基线，维护在
+  `feeds/pon_feed/iptv/{kernel,luci}/.../patches/`。
+
 ## 2026-11-08
 
 ### feed 与包结构整理
