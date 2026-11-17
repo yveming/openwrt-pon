@@ -3,6 +3,23 @@
 本文件记录固件仓库的重要功能、稳定性和维护变更。常规的
 ImmortalWrt 上游合并不逐项展开，仅记录会影响本设备构建或运行行为的内容。
 
+## 2026-11-17
+
+### HG5582A 语音参数对齐原厂
+
+- `luci-app-voip` 默认 codec 顺序改为原厂配置：G.711A 1、
+  G.711U 2、G.729 3、G.722 4。此前 G.722 默认为 1，真实外线会
+  优先协商 16k codec，在 8k FXS/PCM 路径上增加转码和毛刺风险。
+- 新增静态 jitter buffer 配置（默认 50ms），`voip-apply` 在入呼
+  PJSIP 通道和出呼 pre-dial handler 上设置 `JITTERBUFFER(fixed)`。
+- 语音 VLAN 默认 MTU 1460、802.1p 6，由 `voip-apply` 在接口
+  创建/重载时设置，不再单独安装 hotplug 钩子。
+- `flashhook_min` 默认 100ms、数图长定时器 20s、时间同步默认开启，
+  并在 LuCI 中暴露 jitter buffer 参数。
+- 镜像 profile 增加 `asterisk-func-jitterbuffer` 和
+  `asterisk-codec-g729`（bcg729）。源码修改位于
+  `yveming/airoha-voip`；feed 的源码 pin 需要在该仓库提交后更新。
+
 ## 2026-11-16
 
 ### IPTV 组播控制报文 VLAN 可选

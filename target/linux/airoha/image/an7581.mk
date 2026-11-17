@@ -302,9 +302,10 @@ define Device/fiberhome_hg5582a
     kmod-nf-nathelper-fcc kmod-nf-nathelper-rtsp \
     kmod-an7581-zsi kmod-an7581-pcm kmod-an7581-slic-le9641 \
     asterisk asterisk-chan-an7581 asterisk-app-stack asterisk-app-verbose \
-    asterisk-func-volume asterisk-app-read asterisk-app-waituntil asterisk-app-senddtmf \
+    asterisk-func-volume asterisk-func-jitterbuffer \
+    asterisk-app-read asterisk-app-waituntil asterisk-app-senddtmf \
     asterisk-app-playtones asterisk-app-record asterisk-bridge-simple \
-    asterisk-codec-alaw asterisk-codec-g722 asterisk-codec-ulaw \
+    asterisk-codec-alaw asterisk-codec-g722 asterisk-codec-g729 asterisk-codec-ulaw \
     asterisk-format-wav asterisk-res-musiconhold asterisk-res-rtp-asterisk \
     asterisk-sounds \
     kmod-iptv luci-app-iptv luci-i18n-iptv-zh-cn \
