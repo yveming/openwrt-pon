@@ -20,6 +20,18 @@ ImmortalWrt 上游合并不逐项展开，仅记录会影响本设备构建或�
   `asterisk-codec-g729`（bcg729）。源码修改位于
   `yveming/airoha-voip`；feed 的源码 pin 需要在该仓库提交后更新。
 
+### HG5582A 语音/IPTV UI 简化与版本
+
+- `luci-app-voip` 0.2.1-r1：语音状态页只保留设备、接口、链路、
+  IP 地址、网关和策略路由状态；IP 地址显示为带前缀的 CIDR，后续
+  可扩展 IPv6。
+- `luci-app-iptv` 0.2.1-r1、`kmod-iptv` release 3：IPTV 配置新增
+  802.1p 优先级（默认 3）和 MTU（默认 1500）。驱动对所有上行
+  service、multicast 和 IGMP/MLD 报文统一设置 VLAN PCP，不依赖
+  下层 `egress-qos-map`。
+- 源码提交：`airoha-voip` 的 `d2464d7`，`iptv-nd` 的 `306b30f`。
+  feed 的源码 pin 仍需在 push 后更新。
+
 ## 2026-11-16
 
 ### IPTV 组播控制报文 VLAN 可选
