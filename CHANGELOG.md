@@ -33,9 +33,10 @@ ImmortalWrt 上游合并不逐项展开，仅记录会影响本设备构建或�
   匹配 netifd 生成的 `from <ip> lookup <table>` 规则，不再用显示用的
   CIDR 去 grep；同时移除状态页的设备行，保留接口、链路、IP、网关和
   策略路由。
-- IPTV 抓包文档：`pon0` 上的 Query 和 Report 都带 VLAN tag，统一改用
-  `vlan and igmp`。下行 Query 的 PCP 由 OLT 决定（常见为 0），上行
-  Report 的 PCP 由 `iptv` 的 `priority` 决定，不要求双向一致。
+- IPTV 抓包文档（`iptv-nd/docs/igmp-control-vlan.md`）：`pon0` 上的
+  Query 和 Report 都带 VLAN tag，统一改用 `vlan and igmp`。下行 Query
+  的 PCP 由 OLT 决定（常见为 0），上行 Report 的 PCP 由 `iptv` 的
+  `priority` 决定，不要求双向一致。
 - 源码提交：`airoha-voip` 的 `825d089`；feed 只更新 tarball pin，
   不在 feed 内维护本地补丁。
 - 该状态页修复只涉及 `luci-app-voip`，不改动 `kmod-iptv` /
