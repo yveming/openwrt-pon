@@ -300,7 +300,7 @@ define Device/fiberhome_hg5582a
     kmod-airoha-paged-bosa kmod-airoha-xpon airoha-ponctl airoha-pond \
     luci-app-omcproxy luci-i18n-omcproxy-zh-cn luci-theme-argon \
     kmod-nf-nathelper-fcc kmod-nf-nathelper-rtsp \
-    kmod-an7581-zsi kmod-an7581-pcm kmod-an7581-slic-le9641 \
+    kmod-an7581-zsi kmod-an7581-pcm kmod-an7581-slic \
     kmod-fxs-core kmod-an7581-fxs \
     asterisk asterisk-chan-fxs asterisk-app-stack asterisk-app-verbose \
     asterisk-func-volume asterisk-func-jitterbuffer \

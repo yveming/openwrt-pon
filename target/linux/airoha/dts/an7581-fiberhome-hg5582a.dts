@@ -117,6 +117,10 @@
 		reg = <0x0 0x1fbd0000 0x0 0x1000>;
 		reg-names = "pcm";
 		interrupts = <GIC_SPI 27 IRQ_TYPE_LEVEL_HIGH>;
+		airoha,scu = <&scuclk>;
+		airoha,chip-scu = <&chip_scu>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&pcm1_pins>;
 		status = "okay";
 	};
 
@@ -127,7 +131,7 @@
 		airoha,scu = <&scuclk>;
 		airoha,chip-scu = <&chip_scu>;
 		pinctrl-names = "default";
-		pinctrl-0 = <&pcm1_pins>, <&pcm_spi_cs1_pins>;
+		pinctrl-0 = <&pcm_spi_cs1_pins>;
 		#address-cells = <1>;
 		#size-cells = <0>;
 		status = "okay";
