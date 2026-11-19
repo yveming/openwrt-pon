@@ -3,6 +3,58 @@
 本文件记录固件仓库的重要功能、稳定性和维护变更。常规的
 ImmortalWrt 上游合并不逐项展开，仅记录会影响本设备构建或运行行为的内容。
 
+## 2026-11-19
+
+### FXS 通用化：fxs-core / chan_fxs
+
+- `fxs-core` 事件 FIFO 改为按 `struct fxs_event` 元素入队，修复
+  `/dev/fxs0` 读出的 hook 事件只有 `type` 有效、其余字段为栈垃圾的
+  问题。
+- `fxs-core` 增加 SLIC 后端注册/探测接口和
+  `/sys/class/fxs/fxs0/{line_name,state,hook,ringing,active}` 状态。
+- `an7581-fxs` 改为在 probe 时自动探测已注册的 SLIC 后端，不再写死
+  Le9641；`an7581-slic-le9641` 自己注册 detector，并在
+  `fxs-core` 注册 line 时完成 SLIC init/audio up。
+- `an7581-voice.init` 删除；模块加载改由 `kmod-an7581-fxs` /
+  `kmod-an7581-slic-le9641` 的 `AUTOLOAD` 和模块依赖完成。
+- Asterisk 通道改名：`asterisk-chan-an7581` → `asterisk-chan-fxs`，
+  `chan_an7581.so` → `chan_fxs.so`，tech `AN7581` → `FXS`，
+  `AN7581/line1` → `FXS/line1`，`an7581.conf` → `fxs.conf`。
+- `voip-apply` 写 `fxs.conf`、使用 `Dial(FXS/$line)`，状态改读
+  `fxs-core` sysfs；LEC 通过 `FXS_IOC_SET_ECHO_CANCEL` 控制，不再
+  依赖 `an7581_pcm` sysfs 参数。
+- 设备权限改由 `voip-apply boot` 统一设置 `/dev/fxs*`。
+
+## 2026-11-18
+
+### 语音状态页策略路由与 IPTV 抓包说明
+
+- `luci-app-voip`（仍为 0.2.1-r1）：策略路由状态改为按 IP 主机地址
+  匹配 netifd 生成的 `from <ip> lookup <table>` 规则，不再用显示用的
+  CIDR 去 grep；同时移除状态页的设备行，保留接口、链路、IP、网关和
+  策略路由。
+- IPTV 抓包文档：`pon0` 上的 Query 和 Report 都带 VLAN tag，统一改用
+  `vlan and igmp`。下行 Query 的 PCP 由 OLT 决定（常见为 0），上行
+  Report 的 PCP 由 `iptv` 的 `priority` 决定，不要求双向一致。
+- 源码提交：`airoha-voip` 的 `825d089`；feed 只更新 tarball pin，
+  不在 feed 内维护本地补丁。
+- 该状态页修复只涉及 `luci-app-voip`，不改动 `kmod-iptv` /
+  `iptv-nd` 驱动版本。
+
+### 语音挂机状态与出局忙音
+
+- `asterisk-chan-an7581`（仍为 11）：移除 `wait_onhook` 锁存。hook
+  监视器读到的是当前状态而不是事件队列，快速挂机/再摘机可能漏掉
+  中间 onhook；原先该锁存一旦残留，后续 `an7581_start_outgoing()`
+  会一直提前返回。现在每次 offhook 且没有 owner 时都会重新启动
+  出局呼叫，并在挂机、启动音频或 PBX 失败时显式清理 owner 和
+  dialing/collecting 状态。
+- `luci-app-voip`：出局 `Dial()` 返回后统一进入 `postdial`，播放
+  `busy` 忙音 `busy_tone_timer` 秒后再挂断，修复远端先挂机时本机
+  听不到忙音的问题。
+- 源码提交：`airoha-voip` 的 `825d089`；仅更新 `luci-app-voip` 和
+  `asterisk-chan-an7581` 的 tarball pin，不升版本。
+
 ## 2026-11-17
 
 ### HG5582A 语音参数对齐原厂
