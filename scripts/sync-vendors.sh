@@ -10,7 +10,6 @@
 # 设计要点：
 #   * upstream —— 官方基座，直接 merge 到 pon 即可（冲突只会出现在我们自己的改动上）
 #   * pbs05    —— 产品层，通常整段 merge 到 pon；新增包应移到 pon_feed，不进主树
-#   * naoki66  —— 只挑单个补丁（他们的 delta 里有本产品不需要的包与 feed）
 #   * 若某个来源被 force-push 过（锁定提交不再是其祖先），退化为"相对官方基座的树差"
 
 set -eu
@@ -28,11 +27,10 @@ remote_url() {
 	case "$1" in
 	upstream) echo https://github.com/immortalwrt/immortalwrt.git ;;
 	pbs05) echo https://github.com/pbs05/ponwrt.git ;;
-	naoki66) echo https://github.com/naoki66/ImmortalWrt-for-Gemtek-brightspeed.git ;;
 	esac
 }
 
-wanted="${1:-upstream pbs05 naoki66}"
+wanted="${1:-upstream pbs05}"
 
 for name in $wanted; do
 	base="$(lock_value "$name")"

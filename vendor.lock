@@ -2,10 +2,8 @@
 #
 # upstream  immortalwrt/immortalwrt                       官方基座（master = 纯镜像，ff-only）
 # pbs05     pbs05/ponwrt                                  产品层（设备集/镜像 profile，以 merge 引入）
-# naoki66   naoki66/ImmortalWrt-for-Gemtek-brightspeed    XR1710G 线（只按需 cherry-pick 单个补丁）
 #
 # 用法：scripts/sync-vendors.sh 会读取这里的值，打印各来源相对基线的增量。
-# 合并/挑选完成后，把对应行更新为新 tip。
+# 合并完成后，把对应行更新为新 tip。
 upstream=4765b657625ec5bbda74b44400465fe043802b30
-pbs05=d9dd3a49f7bb7661c01e9c57c9e2aac2a1114b3e
-naoki66=c15760c70b7ceeb85fd852d081b06c4bcac1cf5c
+pbs05=f6977f2947eb355b106470354feae3d14868fbdd

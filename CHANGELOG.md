@@ -3,6 +3,28 @@
 本文件记录固件仓库的重要功能、稳定性和维护变更。常规的
 ImmortalWrt 上游合并不逐项展开，仅记录会影响本设备构建或运行行为的内容。
 
+## 2026-11-20
+
+### pbs05 同步与 naoki66 产品线移除
+
+- 合并 `pbs05/master` `f6977f2`：新增 FiberHome AN4475-G2
+  （DTS、image profile、2 MiB PON data、LED/network）、HG5585F 的
+  MT7916 TX/NAPI CPU 亲和性、RTL8221B RJ45 LED 初始化补丁 762。
+- 设备表以 pbs05 为准：删除 naoki66 带来的 XR1710G（`gemtek_xr1710g*`）
+  和 XG2010G UBI/2G（`gemtek_xg2010g-ubi`、`gemtek_xg2010g-2g-ubi`）
+  共 4 个 profile、4 个 DTS 及对应 `board.d`/升级/U-Boot env 条目。
+  保留 pbs05 的 W1700K 和 XG2010G 原厂布局版（`gemtek_xg2010g`）。
+- 删除只服务 XR/XG 的内核补丁（`0401/0402`、`201/202`、
+  `920-xg2010g-pon-17..20`、ptp ToD、generic hack `767`）。
+  共享驱动补丁（pinctrl/PCS/RTL8261/PCIe/flowtable 及 mt76、
+  mac80211、hostapd、wireless-regdb）保留。
+- 删除 naoki66 LuCI feed（`airoha_luci`）及只被其设备使用的
+  `luci-app-mlo`、`airoha-an7581-mt7996-board`、mesh/DAWN feed 补丁。
+- 删除 `1710/2010/2010-2g` 种子、Gemtek 专用检查脚本和 naoki 通用
+  默认值（watchcat/crontab/igmpproxy/sysctl）。
+- `vendor.lock` 的 pbs05 基线更新到 `f6977f2`，移除 naoki66 来源；
+  默认构建 seed 改为 `an7581.config`/`an7583.config`。
+
 ## 2026-11-19
 
 ### FXS 通用化：fxs-core / chan_fxs

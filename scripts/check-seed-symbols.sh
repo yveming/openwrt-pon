@@ -3,7 +3,7 @@
 # 校验种子配置：make defconfig 之后，种子里选中的符号是否仍然生效。
 #
 #   scripts/check-seed-symbols.sh                        # 检查 configs/*.config
-#   scripts/check-seed-symbols.sh configs/1710.config    # 只检查一个
+#   scripts/check-seed-symbols.sh configs/an7581.config  # 只检查一个
 #
 # 为什么需要：包被移出主树、或者 pon_feed 没挂上时，Kconfig 会**静默丢弃**
 # 对应的 CONFIG_PACKAGE_xxx —— 构建照常成功，但镜像里少了一整块功能。
@@ -50,7 +50,7 @@ for seed in "$@"; do
 
 	# 注意字符类里要包含 `-`：OpenWrt 的 package 符号大量带连字符
 	# （CONFIG_PACKAGE_kmod-iptables、CONFIG_PACKAGE_luci-app-*），只写
-	# [A-Za-z0-9_] 会静默跳过它们 —— 1710 种子 1282 个符号里有 292 个被漏掉。
+	# [A-Za-z0-9_] 会静默跳过它们 —— 曾经有 292 个符号因此从未被检查。
 	grep -E '^CONFIG_[A-Za-z0-9_-]+=[ym]$' "$seed" > "$tmpdir/syms" || : > "$tmpdir/syms"
 	: > "$tmpdir/missing"
 
