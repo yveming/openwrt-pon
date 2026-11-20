@@ -8,9 +8,3 @@ src-git video https://github.com/openwrt/video.git
 src-git pon_drivers https://github.com/yveming/openwrt-pon-drivers.git
 src-git pon_userspace https://github.com/pbs05/openwrt-pon-userspace.git
 src-git pon_feed https://github.com/yveming/openwrt-pon-feed.git
-
-# naoki66 LuCI apps
-src-git airoha_luci https://github.com/naoki66/luci-app-airoha.git
-
-# onu_config 只临时借用语音配置；需要时手动 clone 到 package/
-#src-git onu_config https://github.com/naoki66/OpenWrt_ONU_CONFIG.git
